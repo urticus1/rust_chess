@@ -24,20 +24,6 @@ impl TryFrom<BitBoard> for Square {
     }
 }
 
-impl TryFrom<&BitBoard> for Square {
-    type Error = ();
-
-    fn try_from(value: &BitBoard) -> Result<Self, Self::Error> {
-        let index = value.0;
-        let row = index / 7;
-        let column = index >> row;
-        Ok(Square {
-            column: Column::from(column as usize + 1),
-            row: Row::from(row as usize + 1)
-        })
-    }
-}
-
 pub enum Direction {
     Left,
     Right,

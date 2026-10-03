@@ -2,19 +2,20 @@ use crate::bitboard::{BitBoard};
 use crate::{ROW_2, ROW_7};
 use crate::moves::{Direction, Square};
 
+#[derive(Copy, Clone)]
 pub enum Piece {
-    Pawn,
-    Knight,
-    Bishop,
-    Rook,
-    Queen,
-    King,
+    Pawn = 0,
+    Rook = 1,
+    Knight = 2,
+    Bishop = 3,
+    Queen = 4,
+    King = 5,
 }
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
 pub enum Colour {
-    White,
-    Black,
+    White = 0,
+    Black = 1,
 }
 
 impl Colour {
@@ -27,7 +28,7 @@ impl Colour {
 }
 
 impl Piece {
-    pub fn get_pseudo_moves(&self, pos: &Square, pieces: &BitBoard, colour: &Colour) -> BitBoard {
+    pub fn get_pseudo_moves(&self, pos: &Square, pieces: &BitBoard, colour: Colour) -> BitBoard {
 
         match self {
             Piece::Pawn => pawn_moves(&pos.to_bitboard(), colour),
@@ -40,7 +41,7 @@ impl Piece {
     }
 }
 
-fn pawn_moves(pos: &BitBoard, colour: &Colour) -> BitBoard {
+fn pawn_moves(pos: &BitBoard, colour: Colour) -> BitBoard {
     match colour {
         Colour::White => {
             (pos.clone() & ROW_2).shift(Direction::Up).shift(Direction::Up)
@@ -125,42 +126,4 @@ pub fn bishop_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
         }
     }
     result
-}
-
-impl Piece {
-    pub fn to_bitboard_index(&self) -> usize {
-        match self {
-            Piece::Pawn => 0,
-            Piece::Rook => 1,
-            Piece::Knight => 2,
-            Piece::Bishop => 3,
-            Piece::Queen => 4,
-            Piece::King => 5,
-        }
-    }
-}
-impl Into<usize> for Piece {
-    fn into(self) -> usize {
-        match self {
-            Piece::Pawn => 0,
-            Piece::Rook => 1,
-            Piece::Knight => 2,
-            Piece::Bishop => 3,
-            Piece::Queen => 4,
-            Piece::King => 5,
-        }
-    }
-}
-
-impl Into<usize> for &Piece {
-    fn into(self) -> usize {
-        match self {
-            Piece::Pawn => 0,
-            Piece::Rook => 1,
-            Piece::Knight => 2,
-            Piece::Bishop => 3,
-            Piece::Queen => 4,
-            Piece::King => 5,
-        }
-    }
 }
