@@ -11,7 +11,6 @@ use crate::bitboard::{BitBoard};
 use crate::game::{GameState, Move};
 use crate::moves::{Column, Row, Square};
 use crate::pieces::Colour::{Black, White};
-use crate::pieces::Piece::{Knight, Pawn};
 use crate::pieces::{queen_moves, rook_moves, Piece};
 use crate::position::Position;
 
@@ -43,7 +42,7 @@ fn main() {
     let mut game = GameState::new_standard_game();
 
     let pos = Position::new_standard_game();
-    println!("{}", pos.get_legal_moves().len());
+    println!("{}", pos.get_next_positions().len());
 
     game.get_sides_pieces(&White).print();
     game.get_sides_pieces(&Black).print();

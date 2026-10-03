@@ -27,7 +27,7 @@ fn material_score(position: &Position, colour: &Colour) -> f32 {
 }
 
 fn best_move(position: &Position) -> Position {
-    for mv in position.get_legal_moves() {
+    for mv in position.get_next_positions() {
 
     }
     todo!()

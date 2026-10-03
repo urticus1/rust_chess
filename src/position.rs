@@ -53,7 +53,7 @@ impl Position {
             | self.black_bitboards.iter().cloned().reduce(|a,b| a | b).unwrap()
     }
 
-    pub fn get_legal_moves(&self) -> Vec<Position> {
+    pub fn get_next_positions(&self) -> Vec<Position> {
         let pieces = self.get_pieces_and_squares(&self.player_turn);
 
         pieces
@@ -89,7 +89,7 @@ impl Position {
 
         let mut remaining_moves = moves.clone().board;
         let mut next_moves = Vec::new();
-        while remaining_moves > 0 {
+        while remaining_moves != 0 {
             let zeros = remaining_moves.trailing_zeros();
             let to = BitBoard{ board: 1 << zeros };
             let piece_board = self.get_piece_board(&self.player_turn, piece);
@@ -116,7 +116,7 @@ impl Position {
                 }
             }
             next_moves.push(next_pos);
-            remaining_moves & !to.board;
+            remaining_moves = remaining_moves & !&to.board;
         }
         next_moves
     }
@@ -147,9 +147,9 @@ impl Position {
            board = board & board -1;
            let piece = match piece {
                0 => Piece::Pawn,
-               1 => Piece::Knight,
-               2 => Piece::Bishop,
-               3 => Piece::Rook,
+               1 => Piece::Rook,
+               2 => Piece::Knight,
+               3 => Piece::Bishop,
                4 => Piece::Queen,
                5 => Piece::King,
                _ => {
@@ -162,14 +162,15 @@ impl Position {
    }
 
     pub fn get_moves_single_piece(&self, colour: &Colour, piece: &Piece, square: &Square) -> BitBoard {
-        let index: usize = piece.into();
+        let index: usize = piece.to_bitboard_index();
         let board = match colour {
             Colour::White => &self.white_bitboards[index],
             Colour::Black => &self.black_bitboards[index],
         }.clone();
 
         let pos = &square.to_bitboard() & &board;
-        piece.get_pseudo_moves(&pos.try_into().unwrap(), &self.get_all_pieces(), colour)
+        let pseudo_moves = piece.get_pseudo_moves(&pos.try_into().unwrap(), &self.get_all_pieces(), colour);
+        return pseudo_moves & ! self.get_sides_pieces(colour);
     }
 
     pub fn get_piece(&self, colour: &Colour, piece: &Piece) -> BitBoard {
