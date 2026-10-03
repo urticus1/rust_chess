@@ -44,9 +44,6 @@ fn main() {
     let pos = Position::new_standard_game();
     println!("{}", pos.get_next_positions().len());
 
-    game.get_sides_pieces(&White).print();
-    game.get_sides_pieces(&Black).print();
-
     loop {
         let mut buffer = String::new();
         let stdin = io::stdin();
@@ -136,11 +133,8 @@ fn main() {
             to: Square { column: to_column, row: to_row },
         };
 
-        match game.make_move(&mv) {
-            Ok(()) => game.get_all_pieces().print(),
-            Err(e) => println!("{}", e)
-        }
-
+        game.make_move(mv);
+        game.print();
     }
 }
 

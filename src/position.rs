@@ -1,7 +1,7 @@
 use std::hint::black_box;
 use crate::bitboard::BitBoard;
 use crate::game::{GameState, Move, MoveError};
-use crate::moves::Direction::{LeftUp, RightUp};
+use crate::moves::Direction::{LeftDown, LeftUp, RightDown, RightUp};
 use crate::moves::Square;
 use crate::pieces::{Colour, Piece};
 
@@ -9,7 +9,7 @@ use crate::pieces::{Colour, Piece};
 pub struct Position {
     white_bitboards: [BitBoard; 6],
     black_bitboards: [BitBoard; 6],
-    player_turn: Colour,
+    pub player_turn: Colour,
 }
 
 impl Position {
@@ -38,7 +38,68 @@ impl Position {
 
     }
 
+    pub fn get_piece(&self, colour: &Colour, piece: &Piece) -> BitBoard {
+        let index: usize = piece.into();
+        let board = match colour {
+            Colour::White => &self.white_bitboards[index],
+            Colour::Black => &self.black_bitboards[index],
+        };
+        board.clone()
+    }
 
+    pub fn make_move(&self, mv: &Move) -> Result<Position, MoveError> {
+        let from = mv.from.to_bitboard();
+        let to = mv.to.to_bitboard();
+
+        if (&from & &self.get_piece(&self.player_turn, &mv.piece)).0 == 0 {
+            return Err(MoveError::new("No correct colour piece on square"));
+        }
+
+        let pseudo_moves = self.get_moves_single_piece(&self.player_turn, &mv.piece, &mv.from);
+        if pseudo_moves.is_none() {
+            return Err(MoveError::new("No correct position piece on square"));
+        }
+        let pseudo_moves = pseudo_moves.unwrap() & !self.get_sides_pieces(&self.player_turn);
+
+
+        if (&to & &pseudo_moves).0 == 0 {
+            return Err(MoveError::new("Not a valid destination psuedo move"));
+        }
+        let index: usize = mv.piece.to_bitboard_index();
+
+
+        let mut board = self.get_current_turn_boards()[index].clone();
+        board = (board ^ from) | to;
+        let mut new_pos = self.clone();
+        new_pos.update_bitboard(&self.player_turn, &mv.piece, board);
+        new_pos.player_turn = self.player_turn.other();
+        match self.player_turn.other() {
+            Colour::White => {
+                for i in 0..6 {
+                    new_pos.white_bitboards[i] = new_pos.white_bitboards[i] & !to;
+                }
+            },
+            Colour::Black => {
+                for i in 0..6 {
+                    new_pos.black_bitboards[i] = new_pos.black_bitboards[i] & !to;
+                }
+
+            }
+        }
+
+        let opposition_attacks = new_pos.get_attacks(&self.player_turn.other());
+        if (opposition_attacks & new_pos.get_piece(&self.player_turn, &Piece::King)).0 != 0 {
+            return Err(MoveError::new("King in check"));
+        }
+        Ok(new_pos)
+    }
+
+    fn get_current_turn_boards(&self) -> [BitBoard; 6] {
+        match self.player_turn {
+            Colour::White => self.white_bitboards,
+            Colour::Black => self.black_bitboards,
+        }
+    }
 
     pub fn get_sides_pieces(&self, colour: &Colour) -> BitBoard {
         let boards = match colour {
@@ -58,10 +119,11 @@ impl Position {
 
         pieces
             .into_iter()
-            .map(|p| {
-                let moves = self.get_moves_single_piece(&self.player_turn, &p.0, &p.1);
-                self.find_positions_from_move_Set(&p.0, &p.1, &moves)
-            })
+            .map(
+                |p| self.get_moves_single_piece(&self.player_turn, &p.0, &p.1)
+                    .map(|moves| self.find_positions_from_move_Set(&p.0, &p.1, &moves))
+                    .unwrap_or(vec![])
+            )
             .flatten()
         .collect()
     }
@@ -105,10 +167,8 @@ impl Position {
                     for i in 0..6 {
                         next_pos.white_bitboards[i] = &next_pos.white_bitboards[i] & &!&to;
                     }
-
                 },
                 Colour::Black => {
-
                     for i in 0..6 {
                         next_pos.black_bitboards[i] = &next_pos.black_bitboards[i] & &!&to;
                     }
@@ -159,7 +219,7 @@ impl Position {
        squares
    }
 
-    pub fn get_moves_single_piece(&self, colour: &Colour, piece: &Piece, square: &Square) -> BitBoard {
+    pub fn get_moves_single_piece(&self, colour: &Colour, piece: &Piece, square: &Square) -> Option<BitBoard> {
         let index: usize = piece.to_bitboard_index();
         let board = match colour {
             Colour::White => &self.white_bitboards[index],
@@ -167,25 +227,59 @@ impl Position {
         }.clone();
 
         let pos = &square.to_bitboard() & &board;
+        if pos.0 == 0 {
+            return None;
+        }
         let pseudo_moves = piece.get_pseudo_moves(&pos.try_into().unwrap(), &self.get_all_pieces(), colour);
-        return pseudo_moves & ! self.get_sides_pieces(colour);
+        Some(pseudo_moves & ! self.get_sides_pieces(colour))
     }
 
-    pub fn get_piece(&self, colour: &Colour, piece: &Piece) -> BitBoard {
-        let index: usize = piece.into();
-        let board = match colour {
+    pub fn get_moves(&self, colour: &Colour, piece: &Piece) -> Option<BitBoard> {
+        let squares = self.find_piece_squares(piece, colour);
+
+        squares.into_iter()
+            .map(|sq| self.get_moves_single_piece(colour, piece, &sq))
+            .flatten()
+            .reduce(|a,b| a | b)
+    }
+
+    pub fn find_piece_squares(&self, piece: &Piece, colour: &Colour) -> Vec<Square> {
+        let mut board: u64 = self.get_piece(colour, piece).0;
+
+        let mut result = vec![];
+        while board != 0 {
+            let lowest_occupied = board.trailing_zeros();
+            let square = 1 << lowest_occupied;
+            let square = BitBoard(square);
+
+            result.push(Square::try_from(square).unwrap());
+            board &= board - 1;
+        }
+
+        result
+    }
+
+    pub fn get_attacks(&self, colour: &Colour) -> BitBoard {
+        let attacks = self.get_moves(colour, &Piece::Knight).unwrap_or(BitBoard(0))
+            | self.get_moves(colour, &Piece::Bishop).unwrap_or(BitBoard(0))
+            | self.get_moves(colour, &Piece::Rook).unwrap_or(BitBoard(0))
+            | self.get_moves(colour, &Piece::Queen).unwrap_or(BitBoard(0))
+            | self.get_moves(colour, &Piece::King).unwrap_or(BitBoard(0));
+
+        attacks | self.get_pawn_attacks(colour)
+    }
+
+    pub fn get_pawn_attacks(&self, colour: &Colour) -> BitBoard {
+        let index: usize = Piece::Pawn.into();
+        let board: &BitBoard = match colour {
             Colour::White => &self.white_bitboards[index],
             Colour::Black => &self.black_bitboards[index],
         };
-        return board.clone();
+
+        match colour {
+            Colour::White => board.shift(LeftUp) | board.shift(RightUp),
+            Colour::Black => board.shift(LeftDown) | board.shift(RightDown),
+        }
     }
 }
-pub fn get_pawn_attacks(position: &Position, colour: &Colour) -> BitBoard {
-    let index: usize = Piece::Pawn.into();
-    let board: &BitBoard = match colour {
-        Colour::White => &position.white_bitboards[index],
-        Colour::Black => &position.black_bitboards[index],
-    };
 
-    board.shift(LeftUp) | board.shift(RightUp)
-}

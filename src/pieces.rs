@@ -58,6 +58,10 @@ fn king_moves(pos: &BitBoard) -> BitBoard {
     | pos.shift(Direction::Down)
     | pos.shift(Direction::Left)
     | pos.shift(Direction::Right)
+    | pos.shift(Direction::LeftUp)
+    | pos.shift(Direction::RightDown)
+    | pos.shift(Direction::LeftDown)
+    | pos.shift(Direction::RightUp)
 }
 
 fn knight_moves(pos: &BitBoard) -> BitBoard {
