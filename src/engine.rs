@@ -13,11 +13,11 @@ pub fn eval(position: &Position) -> f32 {
 }
 
 fn material_score(position: &Position, colour: &Colour) -> f32 {
-    let pawns = position.get_piece(colour, &Piece::Pawn).board.count_ones() as f32;
-    let knights = position.get_piece(colour, &Piece::Knight).board.count_ones() as f32;
-    let bishops = position.get_piece(colour, &Piece::Bishop).board.count_ones() as f32;
-    let rooks = position.get_piece(colour, &Piece::Rook).board.count_ones() as f32;
-    let queens = position.get_piece(colour, &Piece::Queen).board.count_ones() as f32;
+    let pawns = position.get_piece(colour, &Piece::Pawn).0.count_ones() as f32;
+    let knights = position.get_piece(colour, &Piece::Knight).0.count_ones() as f32;
+    let bishops = position.get_piece(colour, &Piece::Bishop).0.count_ones() as f32;
+    let rooks = position.get_piece(colour, &Piece::Rook).0.count_ones() as f32;
+    let queens = position.get_piece(colour, &Piece::Queen).0.count_ones() as f32;
 
       pawns * PAWN_VALUE
     + knights * KNIGHT_VALUE

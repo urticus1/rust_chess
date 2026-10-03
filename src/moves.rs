@@ -11,12 +11,12 @@ impl TryFrom<BitBoard> for Square {
     type Error = ();
 
     fn try_from(value: BitBoard) -> Result<Self, Self::Error> {
-        if value.board == 0 {
+        if value.0 == 0 {
             return Err(());
         }
-        let index = value.board.trailing_zeros();
+        let index = value.0.trailing_zeros();
         let row = index / 8;
-        let column = (value.board >> row * 8).trailing_zeros();
+        let column = (value.0 >> row * 8).trailing_zeros();
         Ok(Square {
             column: Column::from(column as usize),
             row: Row::from(row as usize)
@@ -28,7 +28,7 @@ impl TryFrom<&BitBoard> for Square {
     type Error = ();
 
     fn try_from(value: &BitBoard) -> Result<Self, Self::Error> {
-        let index = value.board;
+        let index = value.0;
         let row = index / 7;
         let column = index >> row;
         Ok(Square {
@@ -91,9 +91,7 @@ impl Square {
             Column::H => 7,
         };
 
-        BitBoard {
-            board: (1 << column) << 8 * row
-        }
+        BitBoard((1 << column) << 8 * row)
     }
 }
 

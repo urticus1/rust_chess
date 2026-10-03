@@ -87,11 +87,11 @@ impl Position {
 
     fn find_positions_from_move_Set(&self, piece: &Piece, piece_position: &Square, moves: &BitBoard) -> Vec<Position> {
 
-        let mut remaining_moves = moves.clone().board;
+        let mut remaining_moves = moves.clone().0;
         let mut next_moves = Vec::new();
         while remaining_moves != 0 {
             let zeros = remaining_moves.trailing_zeros();
-            let to = BitBoard{ board: 1 << zeros };
+            let to = BitBoard(1 << zeros);
             let piece_board = self.get_piece_board(&self.player_turn, piece);
             let piece_position = piece_position.to_bitboard();
             let result = &piece_board & &!piece_position | to.clone();
@@ -116,31 +116,29 @@ impl Position {
                 }
             }
             next_moves.push(next_pos);
-            remaining_moves = remaining_moves & !&to.board;
+            remaining_moves = remaining_moves & !&to.0;
         }
         next_moves
     }
 
    fn get_pieces_and_squares(&self, colour: &Colour) -> Vec<(Piece, Square)> {
-       let mut board = self.get_sides_pieces(colour).board;
+       let mut board = self.get_sides_pieces(colour).0;
 
        let mut squares = Vec::new();
        while board != 0 {
            let sq = board.trailing_zeros();
-           let sq = BitBoard {
-               board: 1 << sq
-           };
+           let sq = BitBoard(1 << sq);
            let piece = match colour {
                Colour::White => &self.white_bitboards
                    .iter()
                    .enumerate()
-                   .find(|b| (b.1 & &sq).board != 0)
+                   .find(|b| (b.1 & &sq).0 != 0)
                    .map(|b| b.0)
                    .unwrap(),
                Colour::Black => &self.black_bitboards
                    .iter()
                    .enumerate()
-                   .find(|b| (b.1 & &sq).board != 0)
+                   .find(|b| (b.1 & &sq).0 != 0)
                    .map(|b| b.0)
                    .unwrap(),
            };

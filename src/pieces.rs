@@ -73,7 +73,7 @@ fn knight_moves(pos: &BitBoard) -> BitBoard {
 }
 
 pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
-    let mut result = BitBoard { board: 0 };
+    let mut result = BitBoard (0 );
     for dir in [Direction::Up, Direction::Down, Direction::Right, Direction::Left] {
         let mut next = pos.get_neighbour(&dir);
         while next.is_some() {
@@ -81,7 +81,7 @@ pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).board != 0 {
+            if (pieces & &pos_bitboard).0 != 0 {
                 break;
             }
         }
@@ -90,7 +90,7 @@ pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
 }
 
 pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
-    let mut result = BitBoard { board: 0 };
+    let mut result = BitBoard (0 );
     for dir in [Direction::LeftUp, Direction::LeftDown, Direction::RightUp, Direction::RightDown, Direction::Down, Direction::Up, Direction::Left, Direction::Right] {
         let mut next = pos.get_neighbour(&dir);
         while next.is_some() {
@@ -98,7 +98,7 @@ pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).board != 0 {
+            if (pieces & &pos_bitboard).0 != 0 {
                 break;
             }
         }
@@ -107,7 +107,7 @@ pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
 }
 
 pub fn bishop_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
-    let mut result = BitBoard { board: 0 };
+    let mut result = BitBoard (0 );
     for dir in [Direction::LeftUp, Direction::LeftDown, Direction::RightUp, Direction::RightDown] {
         let mut next = pos.get_neighbour(&dir);
         while next.is_some() {
@@ -115,7 +115,7 @@ pub fn bishop_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).board != 0 {
+            if (pieces & &pos_bitboard).0 != 0 {
                 break;
             }
         }

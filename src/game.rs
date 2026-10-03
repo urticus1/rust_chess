@@ -2,25 +2,25 @@ use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::bitboard::{BitBoard};
 use crate::{ ROW_2, ROW_6, ROW_7};
-use crate::moves::Direction::{LeftUp, RightUp};
+use crate::moves::Direction::{LeftDown, LeftUp, RightDown, RightUp};
 use crate::moves::Square;
 use crate::pieces::{Colour, Piece};
 
 pub(crate) const STARTING_PAWNS_BLACK: BitBoard = ROW_7;
 pub(crate) const STARTING_PAWNS_WHITE: BitBoard = ROW_2;
 
-pub(crate) const STARTING_ROOKS_WHITE: BitBoard = BitBoard{ board: 0b_10000001 };
-pub(crate) const STARTING_KNIGHTS_WHITE: BitBoard = BitBoard{ board: 0b_01000010 };
+pub(crate) const STARTING_ROOKS_WHITE: BitBoard = BitBoard(0b_10000001 );
+pub(crate) const STARTING_KNIGHTS_WHITE: BitBoard = BitBoard(0b_01000010 );
 
-pub(crate) const STARTING_BISHOPS_WHITE: BitBoard = BitBoard{ board: 0b_00100100 };
-pub(crate) const STARTING_QUEEN_WHITE: BitBoard = BitBoard{ board: 0b_00001000 };
-pub(crate) const STARTING_KING_WHITE: BitBoard = BitBoard{ board: 0b_00010000 };
+pub(crate) const STARTING_BISHOPS_WHITE: BitBoard = BitBoard(0b_00100100 );
+pub(crate) const STARTING_QUEEN_WHITE: BitBoard = BitBoard(0b_00001000 );
+pub(crate) const STARTING_KING_WHITE: BitBoard = BitBoard(0b_00010000 );
 
-pub(crate) const STARTING_ROOKS_BLACK: BitBoard = BitBoard{ board: STARTING_ROOKS_WHITE.board << 8 * 7 };
-pub(crate) const STARTING_KNIGHTS_BLACK: BitBoard = BitBoard { board: STARTING_KNIGHTS_WHITE.board << 8 * 7 };
-pub(crate) const STARTING_BISHOPS_BLACK: BitBoard = BitBoard { board: STARTING_BISHOPS_WHITE.board << 8 * 7 };
-pub(crate) const STARTING_QUEEN_BLACK: BitBoard = BitBoard { board: STARTING_QUEEN_WHITE.board << 8 * 7 };
-pub(crate) const STARTING_KING_BLACK: BitBoard = BitBoard { board: STARTING_KING_WHITE.board << 8 * 7 };
+pub(crate) const STARTING_ROOKS_BLACK: BitBoard = BitBoard(STARTING_ROOKS_WHITE.0 << 8 * 7 );
+pub(crate) const STARTING_KNIGHTS_BLACK: BitBoard = BitBoard(STARTING_KNIGHTS_WHITE.0 << 8 * 7 );
+pub(crate) const STARTING_BISHOPS_BLACK: BitBoard = BitBoard(STARTING_BISHOPS_WHITE.0 << 8 * 7 );
+pub(crate) const STARTING_QUEEN_BLACK: BitBoard = BitBoard(STARTING_QUEEN_WHITE.0 << 8 * 7 );
+pub(crate) const STARTING_KING_BLACK: BitBoard = BitBoard(STARTING_KING_WHITE.0 << 8 * 7 );
 
 
 pub struct GameState {
@@ -32,15 +32,13 @@ pub struct GameState {
 impl GameState {
 
     pub fn find_piece_squares(&self, piece: &Piece, colour: &Colour) -> Vec<Square> {
-        let mut board: u64 = self.get_piece(colour, piece).board;
+        let mut board: u64 = self.get_piece(colour, piece).0;
 
         let mut result = vec![];
         while board != 0 {
             let lowest_occupied = board.trailing_zeros();
             let square = 1 << lowest_occupied;
-            let square = BitBoard {
-                board: square
-            };
+            let square = BitBoard(square);
 
             result.push(Square::try_from(square).unwrap());
             board &= board - 1;
@@ -87,14 +85,17 @@ impl GameState {
             Colour::Black => &self.black_bitboards[index],
         };
 
-        board.shift(LeftUp) | board.shift(RightUp)
+        match colour {
+            Colour::White => board.shift(LeftUp) | board.shift(RightUp),
+            Colour::Black => board.shift(LeftDown) | board.shift(RightDown),
+        }
     }
 
     pub fn make_move(&mut self, mv: &Move) -> Result<(), MoveError> {
         let from = mv.from.to_bitboard();
         let to = mv.to.to_bitboard();
 
-        if (&from & &self.get_piece(&self.player_turn, &mv.piece)).board == 0 {
+        if (&from & &self.get_piece(&self.player_turn, &mv.piece)).0 == 0 {
             return Err(MoveError{
                 message: "No correct colour piece on square".to_string(),
             });
@@ -104,7 +105,7 @@ impl GameState {
         let pseudo_moves = pseudo_moves & !self.get_sides_pieces(&self.player_turn);
 
 
-        if (&to & &pseudo_moves).board == 0 {
+        if (&to & &pseudo_moves).0 == 0 {
             return Err(MoveError {
                 message: "Not a valid destination psuedo move".to_string(),
             });
@@ -119,7 +120,7 @@ impl GameState {
                 board = &(&board ^ &from) | &to;
                 self.white_bitboards[index] = board.clone();
                 let opposition_attacks = self.get_attacks(&self.player_turn.other());
-                if (opposition_attacks & self.get_piece(&self.player_turn, &Piece::King)).board != 0 {
+                if (opposition_attacks & self.get_piece(&self.player_turn, &Piece::King)).0 != 0 {
                    self.white_bitboards[index] = board | from & !to;
                     return Err(MoveError {
                         message: "King in check".to_string()
@@ -131,7 +132,7 @@ impl GameState {
                 board = &(&board ^ &from) | &to;
                 self.black_bitboards[index] = board.clone();
                 let opposition_attacks = self.get_attacks(&self.player_turn.other());
-                if (opposition_attacks & self.get_piece(&self.player_turn, &Piece::King)).board != 0 {
+                if (opposition_attacks & self.get_piece(&self.player_turn, &Piece::King)).0 != 0 {
                     self.black_bitboards[index] = board | from & !to;
                     return Err(MoveError {
                         message: "King in check".to_string()
