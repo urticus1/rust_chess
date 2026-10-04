@@ -1,8 +1,12 @@
 use crate::bitboard::{BitBoard};
 use crate::{ROW_2, ROW_7};
 use crate::moves::{Direction, Square};
+use crate::position::Position;
 
-#[derive(Copy, Clone)]
+
+
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Piece {
     Pawn = 0,
     Rook = 1,
@@ -28,33 +32,37 @@ impl Colour {
 }
 
 impl Piece {
-    pub fn get_pseudo_moves(&self, pos: &Square, pieces: &BitBoard, colour: Colour) -> BitBoard {
+    pub fn get_pseudo_moves(&self, position: &Position, piece_pos: &Square, pieces: BitBoard, colour: Colour) -> BitBoard {
 
         match self {
-            Piece::Pawn => pawn_moves(&pos.to_bitboard(), colour),
-            Piece::Knight => knight_moves(&pos.to_bitboard()),
-            Piece::Bishop => bishop_moves(pos, pieces),
-            Piece::Rook => rook_moves(pos, pieces),
-            Piece::Queen => queen_moves(pos, pieces),
-            Piece::King => king_moves(&pos.to_bitboard()),
+            Piece::Pawn => pawn_moves(piece_pos.to_bitboard(), position, colour),
+            Piece::Knight => knight_moves(piece_pos.to_bitboard()),
+            Piece::Bishop => bishop_moves(piece_pos, pieces),
+            Piece::Rook => rook_moves(piece_pos, pieces),
+            Piece::Queen => queen_moves(piece_pos, pieces),
+            Piece::King => king_moves(piece_pos.to_bitboard()),
         }
     }
 }
 
-fn pawn_moves(pos: &BitBoard, colour: Colour) -> BitBoard {
+fn pawn_moves(pawn: BitBoard, pos: &Position, colour: Colour) -> BitBoard {
+    let blockers = pos.get_all_pieces();
     match colour {
         Colour::White => {
-            (pos.clone() & ROW_2).shift(Direction::Up).shift(Direction::Up)
-                | pos.shift(Direction::Up)
+            let first_move = (pawn & ROW_2).shift(Direction::Up) & !blockers;
+            let remaining_moves = (first_move | pawn).shift(Direction::Up);
+            first_move | remaining_moves
         },
         Colour::Black => {
-            (pos.clone() & ROW_7).shift(Direction::Down).shift(Direction::Down)
-                | pos.shift(Direction::Down)
+            let first_move = (pawn & ROW_7).shift(Direction::Down) & !blockers;
+            let remaining_moves = (first_move | pawn).shift(Direction::Down);
+            first_move | remaining_moves
         }
     }
 }
 
-fn king_moves(pos: &BitBoard) -> BitBoard {
+//TODO add castling in here?
+fn king_moves(pos: BitBoard) -> BitBoard {
     pos.shift(Direction::Up)
     | pos.shift(Direction::Down)
     | pos.shift(Direction::Left)
@@ -65,7 +73,7 @@ fn king_moves(pos: &BitBoard) -> BitBoard {
     | pos.shift(Direction::RightUp)
 }
 
-fn knight_moves(pos: &BitBoard) -> BitBoard {
+fn knight_moves(pos: BitBoard) -> BitBoard {
     pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Right)
         | pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Left)
         | pos.shift(Direction::Down).shift(Direction::Down).shift(Direction::Right)
@@ -77,7 +85,7 @@ fn knight_moves(pos: &BitBoard) -> BitBoard {
         | pos.shift(Direction::Right).shift(Direction::Right).shift(Direction::Down)
 }
 
-pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
+pub fn rook_moves(pos: &Square, pieces: BitBoard) -> BitBoard {
     let mut result = BitBoard (0 );
     for dir in [Direction::Up, Direction::Down, Direction::Right, Direction::Left] {
         let mut next = pos.get_neighbour(&dir);
@@ -86,7 +94,7 @@ pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).0 != 0 {
+            if (pieces & pos_bitboard).0 != 0 {
                 break;
             }
         }
@@ -94,7 +102,7 @@ pub fn rook_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
     result
 }
 
-pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
+pub fn queen_moves(pos: &Square, pieces: BitBoard) -> BitBoard {
     let mut result = BitBoard (0 );
     for dir in [Direction::LeftUp, Direction::LeftDown, Direction::RightUp, Direction::RightDown, Direction::Down, Direction::Up, Direction::Left, Direction::Right] {
         let mut next = pos.get_neighbour(&dir);
@@ -103,7 +111,7 @@ pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).0 != 0 {
+            if (pieces & pos_bitboard).0 != 0 {
                 break;
             }
         }
@@ -111,7 +119,7 @@ pub fn queen_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
     result
 }
 
-pub fn bishop_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
+pub fn bishop_moves(pos: &Square, pieces: BitBoard) -> BitBoard {
     let mut result = BitBoard (0 );
     for dir in [Direction::LeftUp, Direction::LeftDown, Direction::RightUp, Direction::RightDown] {
         let mut next = pos.get_neighbour(&dir);
@@ -120,7 +128,7 @@ pub fn bishop_moves(pos: &Square, pieces: &BitBoard) -> BitBoard {
             let pos_bitboard = current.to_bitboard();
             result = &result | &pos_bitboard;
             next = current.get_neighbour(&dir);
-            if (pieces & &pos_bitboard).0 != 0 {
+            if (pieces & pos_bitboard).0 != 0 {
                 break;
             }
         }

@@ -38,7 +38,7 @@ impl GameState {
 
     pub fn make_move(&mut self, m: Move) {
         let current = &self.pos;
-        let res = current.make_move(&m);
+        let res = current.make_move(m);
         match res {
             Ok(position) => self.pos = position,
             Err(e) => println!("{}", e)
@@ -50,10 +50,21 @@ impl GameState {
     }
 }
 
-pub struct Move {
+pub struct NormalMove {
     pub from: Square,
     pub to: Square,
     pub piece: Piece,
+}
+
+#[derive(Copy, Clone, PartialEq, Debug, Eq, Hash)]
+pub enum CastleSide {
+    King = 0,
+    Queen = 1,
+}
+
+pub enum Move {
+    Normal(NormalMove),
+    Castle(CastleSide),
 }
 
 #[derive(Debug)]

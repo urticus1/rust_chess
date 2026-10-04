@@ -1,26 +1,124 @@
+use std::fmt::format;
 use crate::bitboard::{BitBoard};
+use crate::{COL_A, COL_H};
 
-#[derive(Clone)]
-pub struct Square {
-    pub column: Column,
-    pub row: Row
+macro_rules! squares {
+    ($($sq:ident => $i:literal),* $(,)?) => {
+
+        #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+        pub enum Square {$($sq),*}
+
+        const ALL: &[Square; 64] = &[$(Square::$sq),*];
+
+        impl TryFrom<usize> for Square {
+            type Error = ();
+
+            fn try_from(value: usize) -> Result<Self, Self::Error> {
+                Ok(self::ALL[value])
+            }
+        }
+
+        impl TryFrom<u64> for Square {
+            type Error = (String);
+
+            fn try_from(value: u64) -> Result<Self, Self::Error> {
+                if value < 0 || value > 63 {
+                    return Err((format!("index {} not valid for square", value)));
+                }
+                Ok(self::ALL[value as usize])
+            }
+        }
+
+        impl TryFrom<String> for Square {
+            type Error = ();
+            fn try_from(value: String) -> Result<Self, Self::Error> {
+                match value.as_str().to_uppercase().as_str() {
+                    $(stringify! {$sq} => Ok(Square::$sq),)*
+                    _ => Err(())
+                }
+            }
+        }
+    }
 }
+
+squares! {
+
+    A1 => 0,
+    B1 => 1,
+    C1 => 2,
+    D1 => 3,
+    E1 => 4,
+    F1 => 5,
+    G1 => 6,
+    H1 => 7,
+    A2 => 8,
+    B2 => 9,
+    C2 => 10,
+    D2 => 11,
+    E2 => 12,
+    F2 => 13,
+    G2 => 14,
+    H2 => 15,
+    A3 => 16,
+    B3 => 17,
+    C3 => 18,
+    D3 => 19,
+    E3 => 20,
+    F3 => 21,
+    G3 => 22,
+    H3 => 23,
+    A4 => 24,
+    B4 => 25,
+    C4 => 26,
+    D4 => 27,
+    E4 => 28,
+    F4 => 29,
+    G4 => 30,
+    H4 => 31,
+    A5 => 32,
+    B5 => 33,
+    C5 => 34,
+    D5 => 35,
+    E5 => 36,
+    F5 => 37,
+    G5 => 38,
+    H5 => 39,
+    A6 => 40,
+    B6 => 41,
+    C6 => 42,
+    D6 => 43,
+    E6 => 44,
+    F6 => 45,
+    G6 => 46,
+    H6 => 47,
+    A7 => 48,
+    B7 => 49,
+    C7 => 50,
+    D7 => 51,
+    E7 => 52,
+    F7 => 53,
+    G7 => 54,
+    H7 => 55,
+    A8 => 56,
+    B8 => 57,
+    C8 => 58,
+    D8 => 59,
+    E8 => 60,
+    F8 => 61,
+    G8 => 62,
+    H8 => 63,
+}
+
 
 
 impl TryFrom<BitBoard> for Square {
     type Error = ();
 
     fn try_from(value: BitBoard) -> Result<Self, Self::Error> {
-        if value.0 == 0 {
+        if value.0 == 0 || value.0.count_ones() != 1 {
             return Err(());
         }
-        let index = value.0.trailing_zeros();
-        let row = index / 8;
-        let column = (value.0 >> row * 8).trailing_zeros();
-        Ok(Square {
-            column: Column::from(column as usize),
-            row: Row::from(row as usize)
-        })
+        Ok(Square::try_from(value.0.trailing_zeros() as usize).expect("Invalid index for square"))
     }
 }
 
@@ -35,197 +133,72 @@ pub enum Direction {
     RightDown,
 }
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum Row {
-    One,
-    Two,
-    Three,
-    Four,
-    Five,
-    Six,
-    Seven,
-    Eight,
-}
-
-
-#[derive(Copy, Clone, PartialEq)]
-pub enum Column {
-    A, B, C, D, E, F, G, H
-}
-
 impl Square {
-    pub fn to_bitboard(&self) -> BitBoard {
-        let row =  match &self.row {
-            Row::One => 0,
-            Row::Two => 1,
-            Row::Three => 2,
-            Row::Four => 3,
-            Row::Five => 4,
-            Row::Six => 5,
-            Row::Seven => 6,
-            Row::Eight => 7,
-        };
-
-        let column = match &self.column {
-            Column::A => 0,
-            Column::B => 1,
-            Column::C => 2,
-            Column::D => 3,
-            Column::E => 4,
-            Column::F => 5,
-            Column::G => 6,
-            Column::H => 7,
-        };
-
-        BitBoard((1 << column) << 8 * row)
+    pub fn to_bitboard(self) -> BitBoard {
+        BitBoard(1 << self as usize)
     }
 }
 
 impl Square {
-    pub fn get_neighbour(&self, direction: &Direction) -> Option<Square> {
+    pub fn get_neighbour(self, direction: &Direction) -> Option<Square> {
+        let index = self as u64;
         match direction {
             Direction::Up => {
-                if self.row == Row::Eight {
+                if index > 55 {
                     None
                 } else {
-                    let mut index: usize = self.row.into();
-                    index = index + 1;
-                    Some(Square { row: index.into(), column: self.column })
+                    Some(Square::try_from(index + 8).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::Down => {
-                if self.row == Row::One {
+                if index < 8 {
                     None
                 } else {
-                    let mut index: usize = self.row.into();
-                    index = index - 1;
-                    Some(Square { row: index.into(), column: self.column })
+                    Some(Square::try_from(index - 8).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::Left => {
-                if self.column == Column::A {
+                if (1 << index & COL_A.0) != 0 {
                     None
                 } else {
-                    let mut index: usize = self.column.into();
-                    index = index - 1;
-                    Some(Square { row: self.row, column: index.into() })
+                    Some(Square::try_from(index - 1).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::Right => {
-                if self.column == Column::H {
+                if (1 << index & COL_H.0) != 0 {
                     None
                 } else {
-                    let mut index: usize = self.column.into();
-                    index = index + 1;
-                    Some(Square { row: self.row, column: index.into() })
+                    Some(Square::try_from(index + 1).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::LeftUp => {
-                if self.column == Column::A || self.row == Row::Eight {
+                if (1 << index & COL_A.0) != 0 || index > 55 {
                     None
                 } else {
-                    let mut col_index: usize = self.column.into();
-                    let mut row_index: usize = self.row.into();
-                    col_index = col_index - 1;
-                    row_index = row_index + 1;
-                    Some(Square { row: row_index.into(), column: col_index.into() })
+                    Some(Square::try_from(index + 7).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::LeftDown => {
-                if self.column == Column::A || self.row == Row::One {
+                if (1 << index & COL_A.0) != 0 || index < 8 {
                     None
                 } else {
-                    let mut col_index: usize = self.column.into();
-                    let mut row_index: usize = self.row.into();
-                    col_index = col_index - 1;
-                    row_index = row_index - 1;
-                    Some(Square { row: row_index.into(), column: col_index.into() })
+                    Some(Square::try_from(index - 9).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::RightUp => {
-                if self.column == Column::H || self.row == Row::Eight {
+                if (1 << index & COL_H.0) != 0 || index > 55 {
                     None
                 } else {
-                    let mut col_index: usize = self.column.into();
-                    let mut row_index: usize = self.row.into();
-                    col_index = col_index + 1;
-                    row_index = row_index + 1;
-                    Some(Square { row: row_index.into(), column: col_index.into() })
+                    Some(Square::try_from(index + 9).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
             Direction::RightDown => {
-                if self.column == Column::H || self.row == Row::One {
+                if (1 << index & COL_H.0) != 0 || index < 8 {
                     None
                 } else {
-                    let mut col_index: usize = self.column.into();
-                    let mut row_index: usize = self.row.into();
-                    col_index = col_index + 1;
-                    row_index = row_index - 1;
-                    Some(Square { row: row_index.into(), column: col_index.into() })
+                    Some(Square::try_from(index - 7).expect(format!("Tried to create square from index {}", index).as_str()))
                 }
             },
-        }
-    }
-}
-
-impl Into<usize> for Column {
-    fn into(self) -> usize {
-        match self {
-            Column::A => 0,
-            Column::B => 1,
-            Column::C => 2,
-            Column::D => 3,
-            Column::E => 4,
-            Column::F => 5,
-            Column::G => 6,
-            Column::H => 7,
-        }
-    }
-}
-
-impl From<usize> for Column {
-    fn from(value: usize) -> Column {
-        match value {
-            0 => Column::A,
-            1 => Column::B,
-            2 => Column::C,
-            3 => Column::D,
-            4 => Column::E,
-            5 => Column::F,
-            6 => Column::G,
-            7 => Column::H,
-            _ => panic!("Invalid column value {}", value)
-        }
-    }
-}
-
-impl Into<usize> for Row {
-    fn into(self) -> usize {
-        match self {
-            Row::One => 0,
-            Row::Two => 1,
-            Row::Three => 2,
-            Row::Four => 3,
-            Row::Five => 4,
-            Row::Six => 5,
-            Row::Seven => 6,
-            Row::Eight => 7,
-        }
-    }
-}
-
-impl From<usize> for Row {
-    fn from(value: usize) -> Self {
-        match value {
-            0 => Row::One,
-            1 => Row::Two,
-            2 => Row::Three,
-            3 => Row::Four,
-            4 => Row::Five,
-            5 => Row::Six,
-            6 => Row::Seven,
-            7 => Row::Eight,
-            _ => panic!("illegal row value: {}", value)
         }
     }
 }

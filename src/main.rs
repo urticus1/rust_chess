@@ -8,24 +8,21 @@ mod engine;
 use std::io;
 use std::ops::{BitAnd, BitOr, Not};
 use crate::bitboard::{BitBoard};
-use crate::game::{GameState, Move};
-use crate::moves::{Column, Row, Square};
-use crate::pieces::Colour::{Black, White};
+use crate::game::{CastleSide, GameState, Move, NormalMove};
+use crate::moves::{Square};
 use crate::pieces::{Piece};
 use crate::position::Position;
 
 const ROW_MASK: u64 = 0b_11111111;
 
-const ROW_1: BitBoard = BitBoard(ROW_MASK );
-const ROW_2: BitBoard = BitBoard(ROW_MASK << 8 );
-const ROW_3: BitBoard = BitBoard(ROW_MASK << 16 );
-const ROW_4: BitBoard = BitBoard(ROW_MASK << 24 );
-const ROW_5: BitBoard = BitBoard(ROW_MASK << 32 );
-const ROW_6: BitBoard = BitBoard(ROW_MASK << 40 );
-const ROW_7: BitBoard = BitBoard(ROW_MASK << 48 );
-const ROW_8: BitBoard = BitBoard(ROW_MASK << 56 );
-
-
+const ROW_1: BitBoard = BitBoard(ROW_MASK);
+const ROW_2: BitBoard = BitBoard(ROW_MASK << 8);
+const ROW_3: BitBoard = BitBoard(ROW_MASK << 16);
+const ROW_4: BitBoard = BitBoard(ROW_MASK << 24);
+const ROW_5: BitBoard = BitBoard(ROW_MASK << 32);
+const ROW_6: BitBoard = BitBoard(ROW_MASK << 40);
+const ROW_7: BitBoard = BitBoard(ROW_MASK << 48);
+const ROW_8: BitBoard = BitBoard(ROW_MASK << 56);
 
 const COL_A: BitBoard = BitBoard(0b_0000000100000001000000010000000100000001000000010000000100000001 );
 
@@ -49,13 +46,25 @@ fn main() {
         let stdin = io::stdin();
         stdin.read_line(&mut buffer).unwrap();
 
+        let castle_side = match buffer.trim().to_uppercase().as_str() {
+            "O-O" | "0-0" => Some(CastleSide::King),
+            "O-O-O" | "0-0-0" => Some(CastleSide::Queen),
+            _ => None,
+        };
+
+        if let Some(side) = castle_side {
+            game.make_move(Move::Castle(side));
+            game.print();
+            continue;
+        }
+
         let mut buffer = buffer.chars();
 
         let piece_choice = buffer.next();
         let piece =
             match piece_choice{
                 Some(c) => {
-                    match c {
+                    match c.to_uppercase().next().unwrap() {
                         'N' => Piece::Knight,
                         'B' => Piece::Bishop,
                         'Q' => Piece::Queen,
@@ -68,70 +77,21 @@ fn main() {
                 None => panic!("Invalid piece name")
             };
 
-        let from_column = match buffer.next() {
-            Some(c) => match c {
-                'a' => Column::A,
-                'b' => Column::B,
-                'c' => Column::C,
-                'd' => Column::D,
-                'e' => Column::E,
-                'f' => Column::F,
-                'g' => Column::G,
-                'h' => Column::H,
-                _ => panic!("Invalid column name"),
-            },
-            None => panic!("Invalid column name"),
-        };
+        let mv = buffer.as_str();
+        let from = mv[0..2].to_string();
+        let to = mv[2..4].to_string();
 
-        let from_row = match buffer.next() {
-            Some(c) => match c {
-                '1' => Row::One,
-                '2' => Row::Two,
-                '3' => Row::Three,
-                '4' => Row::Four,
-                '5' => Row::Five,
-                '6' => Row::Six,
-                '7' => Row::Seven,
-                '8' => Row::Eight,
-                _ => panic!("Invalid row name"),
-            },
-            None => panic!("Invalid row name"),
-        };
+        println!("{}", from);
+        println!("{}", to);
+        println!("{:?}", Square::try_from(from.clone()).unwrap());
 
-        let to_column = match buffer.next() {
-            Some(c) => match c {
-                'a' => Column::A,
-                'b' => Column::B,
-                'c' => Column::C,
-                'd' => Column::D,
-                'e' => Column::E,
-                'f' => Column::F,
-                'g' => Column::G,
-                'h' => Column::H,
-                _ => panic!("Invalid column name"),
-            },
-            None => panic!("Invalid column name"),
-        };
-
-        let to_row = match buffer.next() {
-            Some(c) => match c {
-                '1' => Row::One,
-                '2' => Row::Two,
-                '3' => Row::Three,
-                '4' => Row::Four,
-                '5' => Row::Five,
-                '6' => Row::Six,
-                '7' => Row::Seven,
-                '8' => Row::Eight,
-                _ => panic!("Invalid row name"),
-            },
-            None => panic!("Invalid row name"),
-        };
-        let mv = Move {
-            piece,
-            from: Square { column: from_column, row: from_row },
-            to: Square { column: to_column, row: to_row },
-        };
+        let mv = Move::Normal (
+            NormalMove {
+                piece,
+                from: Square::try_from(from).unwrap(),
+                to: Square::try_from(to).unwrap()
+            }
+        );
 
         game.make_move(mv);
         game.print();
