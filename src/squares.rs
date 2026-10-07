@@ -1,4 +1,3 @@
-use std::fmt::format;
 use crate::bitboard::{BitBoard};
 use crate::{COL_A, COL_H};
 
@@ -19,10 +18,10 @@ macro_rules! squares {
         }
 
         impl TryFrom<u64> for Square {
-            type Error = (String);
+            type Error = String;
 
             fn try_from(value: u64) -> Result<Self, Self::Error> {
-                if value < 0 || value > 63 {
+                if value > 63 {
                     return Err((format!("index {} not valid for square", value)));
                 }
                 Ok(self::ALL[value as usize])
@@ -30,11 +29,11 @@ macro_rules! squares {
         }
 
         impl TryFrom<String> for Square {
-            type Error = ();
+            type Error = String;
             fn try_from(value: String) -> Result<Self, Self::Error> {
                 match value.as_str().to_uppercase().as_str() {
                     $(stringify! {$sq} => Ok(Square::$sq),)*
-                    _ => Err(())
+                    _ => Err("Invalid string for square".to_string()),
                 }
             }
         }
@@ -109,13 +108,11 @@ squares! {
     H8 => 63,
 }
 
-
-
 impl TryFrom<BitBoard> for Square {
     type Error = ();
 
     fn try_from(value: BitBoard) -> Result<Self, Self::Error> {
-        if value.0 == 0 || value.0.count_ones() != 1 {
+        if value.0 == 0 || value.count_ones() != 1 {
             return Err(());
         }
         Ok(Square::try_from(value.0.trailing_zeros() as usize).expect("Invalid index for square"))

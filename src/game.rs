@@ -1,31 +1,11 @@
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
-use crate::bitboard::{BitBoard};
-use crate::{ ROW_2, ROW_6, ROW_7};
-use crate::moves::Direction::{LeftDown, LeftUp, RightDown, RightUp};
-use crate::moves::Square;
+use crate::squares::Square;
 use crate::pieces::{Colour, Piece};
 use crate::position::Position;
 
-pub(crate) const STARTING_PAWNS_BLACK: BitBoard = ROW_7;
-pub(crate) const STARTING_PAWNS_WHITE: BitBoard = ROW_2;
-
-pub(crate) const STARTING_ROOKS_WHITE: BitBoard = BitBoard(0b_10000001 );
-pub(crate) const STARTING_KNIGHTS_WHITE: BitBoard = BitBoard(0b_01000010 );
-
-pub(crate) const STARTING_BISHOPS_WHITE: BitBoard = BitBoard(0b_00100100 );
-pub(crate) const STARTING_QUEEN_WHITE: BitBoard = BitBoard(0b_00001000 );
-pub(crate) const STARTING_KING_WHITE: BitBoard = BitBoard(0b_00010000 );
-
-pub(crate) const STARTING_ROOKS_BLACK: BitBoard = BitBoard(STARTING_ROOKS_WHITE.0 << 8 * 7 );
-pub(crate) const STARTING_KNIGHTS_BLACK: BitBoard = BitBoard(STARTING_KNIGHTS_WHITE.0 << 8 * 7 );
-pub(crate) const STARTING_BISHOPS_BLACK: BitBoard = BitBoard(STARTING_BISHOPS_WHITE.0 << 8 * 7 );
-pub(crate) const STARTING_QUEEN_BLACK: BitBoard = BitBoard(STARTING_QUEEN_WHITE.0 << 8 * 7 );
-pub(crate) const STARTING_KING_BLACK: BitBoard = BitBoard(STARTING_KING_WHITE.0 << 8 * 7 );
-
-
 pub struct GameState {
-    pos: Position,
+    pub pos: Position,
 }
 
 impl GameState {
@@ -38,6 +18,17 @@ impl GameState {
 
     pub fn make_move(&mut self, m: Move) {
         let current = &self.pos;
+
+        match m {
+            Move::Normal(ref mv) => {
+                self.validate_normal_move(mv);
+                self.pos.make_normal_move(mv);
+            },
+            Move::Castle(side, colour) => {
+                self.validate_castle_move(colour, side);
+                self.pos.make_castle_move(side);
+            }
+        }
         let res = current.make_move(m);
         match res {
             Ok(position) => self.pos = position,
@@ -45,8 +36,36 @@ impl GameState {
         }
     }
 
+    fn validate_castle_move(&self, colour: Colour, side: CastleSide) -> Result<(), MoveError> {
+        if !self.pos.can_castle(colour, side) {
+            return Err(MoveError::new("Cannot castle"))
+        };
+        Ok(())
+    }
+
+    fn validate_normal_move(&self, mv: &NormalMove) -> Result<(), MoveError> {
+        let from = mv.from.to_bitboard();
+        let to = mv.to.to_bitboard();
+
+        if (from & self.pos.get_piece(self.pos.player_turn, mv.piece)).is_empty() {
+            return Err(MoveError::new("No correct colour piece on square"));
+        }
+
+        let pseudo_moves = self.pos.get_pseudo_moves_single_piece(self.pos.player_turn, mv.piece, &mv.from);
+        if pseudo_moves.is_none() {
+            return Err(MoveError::new("No correct position piece on square"));
+        }
+        let pseudo_moves = pseudo_moves.unwrap() & !self.pos.get_sides_pieces(self.pos.player_turn);
+
+
+        if (to & pseudo_moves).is_empty() {
+            return Err(MoveError::new("Not a valid destination psuedo move"));
+        }
+        Ok(())
+    }
+
     pub fn print(&self) {
-        self.pos.get_all_pieces().print();
+        print!("{}", self.pos.get_all_pieces());
     }
 }
 
@@ -64,7 +83,7 @@ pub enum CastleSide {
 
 pub enum Move {
     Normal(NormalMove),
-    Castle(CastleSide),
+    Castle(CastleSide, Colour),
 }
 
 #[derive(Debug)]

@@ -1,16 +1,17 @@
 mod pieces;
 mod game;
 mod bitboard;
-mod moves;
+mod squares;
 mod position;
 mod engine;
 
 use std::io;
 use std::ops::{BitAnd, BitOr, Not};
 use crate::bitboard::{BitBoard};
+use crate::engine::get_best_move;
 use crate::game::{CastleSide, GameState, Move, NormalMove};
-use crate::moves::{Square};
-use crate::pieces::{Piece};
+use crate::squares::{Square};
+use crate::pieces::{Colour, Piece};
 use crate::position::Position;
 
 const ROW_MASK: u64 = 0b_11111111;
@@ -39,7 +40,7 @@ fn main() {
     let mut game = GameState::new_standard_game();
 
     let pos = Position::new_standard_game();
-    println!("{}", pos.get_next_positions().len());
+
 
     loop {
         let mut buffer = String::new();
@@ -53,7 +54,7 @@ fn main() {
         };
 
         if let Some(side) = castle_side {
-            game.make_move(Move::Castle(side));
+            game.make_move(Move::Castle(side, Colour::White));
             game.print();
             continue;
         }
@@ -94,7 +95,11 @@ fn main() {
         );
 
         game.make_move(mv);
-        game.print();
+        let computer_move = get_best_move(&game.pos);
+        println!("Computer eval: {}", computer_move.0);
+        println!("Computer final pos: {}", computer_move.2);
+        game.pos = computer_move.1;
+        println!("{}", game.pos);
     }
 }
 

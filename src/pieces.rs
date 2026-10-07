@@ -1,10 +1,7 @@
 use crate::bitboard::{BitBoard};
 use crate::{ROW_2, ROW_7};
-use crate::moves::{Direction, Square};
+use crate::squares::{Direction, Square};
 use crate::position::Position;
-
-
-
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Piece {
@@ -16,7 +13,7 @@ pub enum Piece {
     King = 5,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Colour {
     White = 0,
     Black = 1,
@@ -35,7 +32,7 @@ impl Piece {
     pub fn get_pseudo_moves(&self, position: &Position, piece_pos: &Square, pieces: BitBoard, colour: Colour) -> BitBoard {
 
         match self {
-            Piece::Pawn => pawn_moves(piece_pos.to_bitboard(), position, colour),
+            Piece::Pawn => single_pawn_moves(piece_pos.to_bitboard(), position, colour) | (single_pawn_pseudo_attacks(piece_pos.to_bitboard(), colour) & position.get_sides_pieces(colour.other())),
             Piece::Knight => knight_moves(piece_pos.to_bitboard()),
             Piece::Bishop => bishop_moves(piece_pos, pieces),
             Piece::Rook => rook_moves(piece_pos, pieces),
@@ -45,24 +42,39 @@ impl Piece {
     }
 }
 
-fn pawn_moves(pawn: BitBoard, pos: &Position, colour: Colour) -> BitBoard {
+fn single_pawn_moves(pawn: BitBoard, pos: &Position, colour: Colour) -> BitBoard {
     let blockers = pos.get_all_pieces();
     match colour {
         Colour::White => {
             let first_move = (pawn & ROW_2).shift(Direction::Up) & !blockers;
-            let remaining_moves = (first_move | pawn).shift(Direction::Up);
+            let remaining_moves = (first_move | pawn).shift(Direction::Up) & !blockers;
             first_move | remaining_moves
         },
         Colour::Black => {
             let first_move = (pawn & ROW_7).shift(Direction::Down) & !blockers;
-            let remaining_moves = (first_move | pawn).shift(Direction::Down);
+            let remaining_moves = (first_move | pawn).shift(Direction::Down) & !blockers;
             first_move | remaining_moves
         }
     }
 }
 
+fn single_pawn_pseudo_attacks(pawn: BitBoard, colour: Colour) -> BitBoard {
+    match colour {
+        Colour::White => pawn.shift(Direction::LeftUp) | pawn.shift(Direction::RightUp),
+        Colour::Black => pawn.shift(Direction::LeftDown) | pawn.shift(Direction::RightDown),
+    }
+}
+pub fn all_pawn_attacks(pos: &Position, colour: Colour) -> BitBoard {
+    let board = pos.get_piece_board(colour, Piece::Pawn);
+
+    match colour {
+        Colour::White => board.shift(Direction::LeftUp) | board.shift(Direction::RightUp),
+        Colour::Black => board.shift(Direction::LeftDown) | board.shift(Direction::RightDown),
+    }
+}
+
 //TODO add castling in here?
-fn king_moves(pos: BitBoard) -> BitBoard {
+pub fn king_moves(pos: BitBoard) -> BitBoard {
     pos.shift(Direction::Up)
     | pos.shift(Direction::Down)
     | pos.shift(Direction::Left)
@@ -134,4 +146,27 @@ pub fn bishop_moves(pos: &Square, pieces: BitBoard) -> BitBoard {
         }
     }
     result
+}
+
+
+#[cfg(test)]
+mod tests {
+    use crate::pieces::{Colour, Piece};
+    use crate::position::Position;
+    use crate::squares::Square;
+
+    #[test]
+    fn test_rook_captures() {
+
+        let mut pos = Position::blank();
+        pos.update_bitboard(Colour::White, Piece::Rook, Square::A1.to_bitboard());
+
+        pos.update_bitboard(Colour::White, Piece::Queen, Square::A2.to_bitboard());
+        pos.update_bitboard(Colour::Black, Piece::Queen, Square::B1.to_bitboard());
+
+        let moves = pos.get_moves(Colour::White, Piece::Rook);
+
+        assert!(moves.is_some());
+        assert!(Square::B1.to_bitboard() == moves.unwrap())
+    }
 }
