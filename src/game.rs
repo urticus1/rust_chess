@@ -16,24 +16,33 @@ impl GameState {
         }
     }
 
-    pub fn make_move(&mut self, m: Move) {
+    pub fn make_move(&mut self, m: Move) -> Result<(), MoveError> {
         let current = &self.pos;
 
         match m {
             Move::Normal(ref mv) => {
-                self.validate_normal_move(mv);
-                self.pos.make_normal_move(mv);
+                if let Err(err) = self.validate_normal_move(mv) {
+                    return Err(err);
+                }
+                if let Err(err) = self.pos.make_normal_move(mv) {
+                    return Err(err);
+                }
             },
             Move::Castle(side, colour) => {
-                self.validate_castle_move(colour, side);
+                if let Err(err) = self.validate_castle_move(colour, side) {
+                    return Err(err);
+                }
                 self.pos.make_castle_move(side);
             }
         }
         let res = current.make_move(m);
-        match res {
-            Ok(position) => self.pos = position,
-            Err(e) => println!("{}", e)
-        }
+        return match res {
+            Ok(position) => {
+                self.pos = position;
+                Ok(())
+            },
+            Err(e) => Err(e)
+        };
     }
 
     fn validate_castle_move(&self, colour: Colour, side: CastleSide) -> Result<(), MoveError> {
@@ -51,7 +60,7 @@ impl GameState {
             return Err(MoveError::new("No correct colour piece on square"));
         }
 
-        let pseudo_moves = self.pos.get_pseudo_moves_single_piece(self.pos.player_turn, mv.piece, &mv.from);
+        let pseudo_moves = self.pos.get_pseudo_moves_single_piece(self.pos.player_turn, mv.piece, mv.from);
         if pseudo_moves.is_none() {
             return Err(MoveError::new("No correct position piece on square"));
         }
@@ -69,6 +78,7 @@ impl GameState {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NormalMove {
     pub from: Square,
     pub to: Square,
@@ -81,6 +91,7 @@ pub enum CastleSide {
     Queen = 1,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Move {
     Normal(NormalMove),
     Castle(CastleSide, Colour),

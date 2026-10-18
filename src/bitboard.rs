@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl};
 use crate::{COL_A, COL_H, ROW_1, ROW_8, ROW_MASK};
-use crate::squares::Direction;
+use crate::squares::{Direction, Square};
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct BitBoard(pub u64);
@@ -20,6 +20,19 @@ impl fmt::Display for BitBoard {
             write!(f, "{} ", ('A' as u8 + i) as char)?;
         }
         write!(f, "\n\n\n")
+    }
+}
+
+impl Iterator for BitBoard {
+    type Item = Square;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 == 0 {
+            return None;
+        }
+        let zeros = self.0.trailing_zeros();
+        self.0 = self.0 & !(1 << zeros);
+        Some(Square::try_from(zeros as u64).expect("bitboard iterator generated non unique sqaure"))
     }
 }
 

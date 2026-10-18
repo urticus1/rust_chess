@@ -1,5 +1,6 @@
 use crate::bitboard::{BitBoard};
 use crate::{ROW_2, ROW_7};
+use crate::pieces::Piece::{Bishop, King, Knight, Pawn, Queen, Rook};
 use crate::squares::{Direction, Square};
 use crate::position::Position;
 
@@ -10,7 +11,11 @@ pub enum Piece {
     Knight = 2,
     Bishop = 3,
     Queen = 4,
-    King = 5,
+    King = 5
+}
+
+impl Piece {
+    pub const ALL: &'static [Piece; 6] = &[Pawn, Rook, Knight, Bishop, Queen, King];
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]

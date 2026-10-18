@@ -1,4 +1,5 @@
-use std::arch::x86_64::_mm_minpos_epu16;
+use crate::game::Move;
+use crate::move_gen::generate_valid_moves;
 use crate::pieces::{king_moves, Colour, Piece};
 use crate::position::Position;
 
@@ -8,52 +9,110 @@ const BISHOP_VALUE: f32 = 3.0;
 const ROOK_VALUE: f32 = 5.0;
 const QUEEN_VALUE: f32 = 9.0;
 
+
+macro_rules! heat_map {
+      ($name:ident { $( [$($sq:expr),* ]),* $(,)?}) => {
+          const $name: [f32; 64] = [$( $($sq,)* )*];
+      };
+  }
+
+heat_map!( KNIGHT_MAP {
+    [-0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3],
+    [-0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.3],
+    [-0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.3],
+    [-0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.3],
+    [-0.3, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, -0.3],
+    [-0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, -0.3],
+    [-0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3, -0.3],
+    [-0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3, -0.3],
+});
+
+heat_map!( PAWN_MAP {
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.2, 0.2, 0.2, 0.2, 0.0, 0.0],
+    [0.0, 0.0, 0.3, 0.3, 0.3, 0.3, 0.0, 0.0],
+    [0.0, 0.0, 0.4, 0.4, 0.4, 0.4, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+});
+
+heat_map!( BLANK_MAP {
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+});
+
+
 pub fn eval(position: &Position) -> f32 {
-    material_score(position, Colour::White) - material_score(position, Colour::Black)
+
+    let positional_score: f32 = Piece::ALL.iter()
+        .flat_map(|piece| position.get_piece(position.player_turn, *piece).map(move |sq| (sq, piece)))
+        .map(|(sq, piece)| {
+            let heat_map = match piece {
+                Piece::Pawn => PAWN_MAP,
+                Piece::Knight => KNIGHT_MAP,
+                _ => BLANK_MAP
+            };
+            let index = if position.player_turn == Colour::White { sq as usize } else { 63 - sq as usize };
+            heat_map[index]
+        })
+        .map(|score| {
+            if position.player_turn == Colour::Black {
+                return score * -1.0;
+            }
+            score
+        })
+        .sum();
+
+    material_score(position, Colour::White) - material_score(position, Colour::Black) + positional_score
 }
 
-enum MinMax {
-    Min,
-    Max
-}
-
-pub fn get_best_move(position: &Position) -> (f32, Position, Position) {
+pub fn get_best_move(position: &Position) -> (f32, Option<Move>) {
     let start_pos = position.clone();
     search(0, &start_pos)
 }
 
-fn search(depth: u8, position: &Position) -> (f32, Position, Position) {
+fn search(depth: u8, position: &Position) -> (f32, Option<Move>) {
     if depth >= 4 {
-        return (eval(position), position.clone(), position.clone());
+        return (eval(position), None);
     }
 
     let mut best_score = match position.player_turn {
         Colour::White => -f32::INFINITY,
         Colour::Black => f32::INFINITY
     };
-    let mut best_move = position.clone();
-    let mut final_pos= position.clone();
+    let mut best_move = None;
 
-    for child in position.get_next_positions() {
-        let (eval, mv, fp) = search(depth + 1, &child);
-        match position.player_turn {
-            Colour::White => {
-                if eval >= best_score {
-                    best_score = eval;
-                    best_move = child;
-                    final_pos = fp
-                }
-            },
-            Colour::Black => {
-                if eval <= best_score {
-                    best_score = eval;
-                    best_move = child;
-                    final_pos = fp
+    for mv in generate_valid_moves(position) {
+        let new_pos = position.make_move(mv);
+        if let Ok(valid_pos) = new_pos {
+            let (eval, _) = search(depth + 1, &valid_pos);
+            match position.player_turn {
+                Colour::White => {
+                    if eval >= best_score {
+                        best_score = eval;
+                        best_move = Some(mv);
+                    }
+                },
+                Colour::Black => {
+                    if eval <= best_score {
+                        best_score = eval;
+                        best_move = Some(mv);
+                    }
                 }
             }
         }
+
     }
-    (best_score, best_move, final_pos)
+
+    (best_score, best_move)
 }
 
 fn material_score(position: &Position, colour: Colour) -> f32 {

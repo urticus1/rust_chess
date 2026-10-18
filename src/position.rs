@@ -86,11 +86,11 @@ impl Position {
     pub fn make_move(&self, mv: Move) -> Result<Position, MoveError> {
         match mv {
             Move::Normal(normal) => self.make_normal_move(&normal),
-            Move::Castle(side, ..) => self.make_castle_move(side)
+            Move::Castle(side, ..) => Ok(self.make_castle_move(side))
         }
     }
 
-    pub fn make_castle_move(&self, side: CastleSide) -> Result<Position, MoveError> {
+    pub fn make_castle_move(&self, side: CastleSide) -> Position {
         let mut new_pos = self.clone();
         new_pos.player_turn = self.player_turn.other();
         new_pos.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
@@ -108,7 +108,7 @@ impl Position {
         new_pos.piece_boards[self.player_turn as usize][Piece::Rook as usize] = (current_rooks & !rook_start.to_bitboard()) | rook_end.to_bitboard();
         new_pos.piece_boards[self.player_turn as usize][Piece::King as usize] = king_end.to_bitboard();
 
-        Ok(new_pos)
+        new_pos
     }
 
     pub fn make_normal_move(&self, mv: &NormalMove) -> Result<Position, MoveError> {
@@ -179,7 +179,7 @@ impl Position {
         pieces
             .into_iter()
             .map(
-                |p| self.get_pseudo_moves_single_piece(self.player_turn, p.0, &p.1)
+                |p| self.get_pseudo_moves_single_piece(self.player_turn, p.0, p.1)
                     .map(|pseudo_moves| pseudo_moves & !self.get_sides_pieces(self.player_turn))
                     .map(|moves| self.find_positions_from_move_set(p.0, &p.1, &moves))
                     .unwrap_or(vec![])
@@ -203,7 +203,7 @@ impl Position {
 
         let enemy_attacks = self.get_attacks(colour.other());
         let blockers = self.get_all_pieces();
-        let castle_path = crate::position::CASTLE_PATHS[colour as usize][side as usize];
+        let castle_path = CASTLE_PATHS[colour as usize][side as usize];
         let king = self.get_piece_board(colour, Piece::King);
 
         if ((castle_path & blockers) | ((castle_path | king) & enemy_attacks)).0 != 0 {
@@ -266,7 +266,7 @@ impl Position {
        squares
    }
 
-    pub fn get_pseudo_moves_single_piece(&self, colour: Colour, piece: Piece, square: &Square) -> Option<BitBoard> {
+    pub fn get_pseudo_moves_single_piece(&self, colour: Colour, piece: Piece, square: Square) -> Option<BitBoard> {
         let board = self.piece_boards[colour as usize][piece as usize];
 
         let pos = square.to_bitboard() & board;
@@ -281,7 +281,7 @@ impl Position {
         let squares = self.find_piece_squares(piece, colour);
 
         squares.into_iter()
-            .map(|sq| self.get_pseudo_moves_single_piece(colour, piece, &sq))
+            .map(|sq| self.get_pseudo_moves_single_piece(colour, piece, sq))
             .flatten()
             .map(|pseudo_moves| pseudo_moves & !self.get_sides_pieces(self.player_turn))
             .reduce(|a,b| a | b)
@@ -437,8 +437,8 @@ mod tests {
     fn castling_blocked_in_starting_position() {
         let pos = Position::new_standard_game();
 
-        assert!(pos.make_move(Move::Castle(CastleSide::King)).is_err());
-        assert!(pos.make_move(Move::Castle(CastleSide::Queen)).is_err());
+        assert!(pos.make_move(Move::Castle(CastleSide::King, Colour::White)).is_err());
+        assert!(pos.make_move(Move::Castle(CastleSide::Queen, Colour::White)).is_err());
     }
 
     // ---- Pawn moves and captures ----

@@ -4,12 +4,14 @@ mod bitboard;
 mod squares;
 mod position;
 mod engine;
+mod move_gen;
 
 use std::io;
 use std::ops::{BitAnd, BitOr, Not};
 use crate::bitboard::{BitBoard};
 use crate::engine::get_best_move;
 use crate::game::{CastleSide, GameState, Move, NormalMove};
+use crate::move_gen::generate_valid_moves;
 use crate::squares::{Square};
 use crate::pieces::{Colour, Piece};
 use crate::position::Position;
@@ -38,6 +40,8 @@ const COL_H:  BitBoard = BitBoard(0b_1000000010000000100000001000000010000000100
 fn main() {
 
     let mut game = GameState::new_standard_game();
+
+    println!("{:?}", generate_valid_moves(&game.pos));
 
     let pos = Position::new_standard_game();
 
@@ -97,8 +101,10 @@ fn main() {
         game.make_move(mv);
         let computer_move = get_best_move(&game.pos);
         println!("Computer eval: {}", computer_move.0);
-        println!("Computer final pos: {}", computer_move.2);
-        game.pos = computer_move.1;
+        println!("Computer mv: {:?}", computer_move.1);
+        if let Some(computer_move) = computer_move.1 {
+            game.make_move(computer_move);
+        }
         println!("{}", game.pos);
     }
 }
