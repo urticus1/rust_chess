@@ -1,7 +1,6 @@
 use std::fmt;
 use crate::bitboard::BitBoard;
 use crate::game::{CastleSide, Move, MoveError, NormalMove};
-use crate::squares::Direction::{LeftDown, LeftUp, RightDown, RightUp};
 use crate::squares::Square;
 use crate::pieces::{all_pawn_attacks, Colour, Piece};
 use crate::{ROW_2, ROW_7};
@@ -23,10 +22,10 @@ const STARTING_QUEEN_BLACK: BitBoard = BitBoard(STARTING_QUEEN_WHITE.0 << 8 * 7 
 const STARTING_KING_BLACK: BitBoard = BitBoard(STARTING_KING_WHITE.0 << 8 * 7 );
 
 const WHITE_KINGSIDE_CASTLE_PATH: BitBoard = BitBoard(0b01100000u64);
-const WHITE_QUEENSIDE_CASTLE_PATH: BitBoard = BitBoard(0b00001110u64);
+const WHITE_QUEENSIDE_CASTLE_PATH: BitBoard = BitBoard(0b00001100u64);
 
 const BLACK_KINGSIDE_CASTLE_PATH: BitBoard = BitBoard(0b01100000u64 << (8 * 7));
-const BLACK_QUEENSIDE_CASTLE_PATH: BitBoard = BitBoard(0b00001110u64 << (8 * 7));
+const BLACK_QUEENSIDE_CASTLE_PATH: BitBoard = BitBoard(0b00001100u64 << (8 * 7));
 
 const CASTLE_PATHS: [[BitBoard; 2]; 2] = [
     [WHITE_KINGSIDE_CASTLE_PATH, WHITE_QUEENSIDE_CASTLE_PATH],
@@ -173,21 +172,6 @@ impl Position {
         self.piece_boards.iter().flatten().copied().reduce(|a,b| a | b).unwrap()
     }
 
-    pub fn get_next_positions(&self) -> Vec<Position> {
-        let pieces = self.get_pieces_and_squares(self.player_turn);
-
-        pieces
-            .into_iter()
-            .map(
-                |p| self.get_pseudo_moves_single_piece(self.player_turn, p.0, p.1)
-                    .map(|pseudo_moves| pseudo_moves & !self.get_sides_pieces(self.player_turn))
-                    .map(|moves| self.find_positions_from_move_set(p.0, &p.1, &moves))
-                    .unwrap_or(vec![])
-            )
-            .flatten()
-        .collect()
-    }
-
     pub fn update_bitboard(&mut self, colour: Colour, piece: Piece, value: BitBoard) {
         self.piece_boards[colour as usize][piece as usize] = value;
     }
@@ -212,95 +196,29 @@ impl Position {
         true
     }
 
-    fn find_positions_from_move_set(&self, piece: Piece, piece_position: &Square, moves: &BitBoard) -> Vec<Position> {
-        let mut remaining_moves = moves.clone().0;
-        let mut next_moves = Vec::new();
-        while remaining_moves != 0 {
-            let zeros = remaining_moves.trailing_zeros();
-            let to = BitBoard(1 << zeros);
-            let piece_board = self.get_piece_board(self.player_turn, piece);
-            let piece_position = piece_position.to_bitboard();
-            let result = piece_board & !piece_position | to.clone();
 
-            let mut next_pos = self.clone();
-            next_pos.update_bitboard(self.player_turn, piece, result);
-            next_pos.player_turn = self.player_turn.other();
-
-            let opponent = self.player_turn.other() as usize;
-            for i in 0..6 {
-                next_pos.piece_boards[opponent][i] = next_pos.piece_boards[opponent][i] & !to;
-            }
-            next_moves.push(next_pos);
-            remaining_moves = remaining_moves & !&to.0;
-        }
-        next_moves
-    }
-
-   fn get_pieces_and_squares(&self, colour: Colour) -> Vec<(Piece, Square)> {
-       let mut board = self.get_sides_pieces(colour).0;
-
-       let mut squares = Vec::new();
-       while board != 0 {
-           let sq = board.trailing_zeros();
-           let sq = BitBoard(1 << sq);
-           let piece = self.piece_boards[colour as usize]
-               .iter()
-               .enumerate()
-               .find(|b| (*b.1 & sq).0 != 0)
-               .map(|b| b.0)
-               .unwrap();
-           board = board & board -1;
-           let piece = match piece {
-               0 => Piece::Pawn,
-               1 => Piece::Rook,
-               2 => Piece::Knight,
-               3 => Piece::Bishop,
-               4 => Piece::Queen,
-               5 => Piece::King,
-               _ => {
-                   panic!("invalid piece nunmber");
-               }
-           };
-           squares.push((piece, Square::try_from(sq).unwrap()));
-       }
-       squares
-   }
-
-    pub fn get_pseudo_moves_single_piece(&self, colour: Colour, piece: Piece, square: Square) -> Option<BitBoard> {
+    pub fn get_pseudo_moves_single_piece_validated(&self, colour: Colour, piece: Piece, square: Square) -> Option<BitBoard> {
         let board = self.piece_boards[colour as usize][piece as usize];
 
         let pos = square.to_bitboard() & board;
         if pos.is_empty() {
             return None;
         }
-        let pseudo_moves = piece.get_pseudo_moves(&self, &pos.try_into().unwrap(), self.get_all_pieces(), colour);
+        let pseudo_moves = piece.get_pseudo_moves(&self, pos.try_into().unwrap(), self.get_all_pieces(), colour);
         Some(pseudo_moves)
     }
 
-    pub fn get_moves(&self, colour: Colour, piece: Piece) -> Option<BitBoard> {
-        let squares = self.find_piece_squares(piece, colour);
-
-        squares.into_iter()
-            .map(|sq| self.get_pseudo_moves_single_piece(colour, piece, sq))
-            .flatten()
-            .map(|pseudo_moves| pseudo_moves & !self.get_sides_pieces(self.player_turn))
-            .reduce(|a,b| a | b)
+    pub fn get_pseudo_moves_single_piece(&self, colour: Colour, piece: Piece, square: Square) -> BitBoard {
+        piece.get_pseudo_moves(&self, square, self.get_all_pieces(), colour)
     }
 
-    fn find_piece_squares(&self, piece: Piece, colour: Colour) -> Vec<Square> {
-        let mut board: u64 = self.get_piece(colour, piece).0;
+    pub fn get_moves(&self, colour: Colour, piece: Piece) -> Option<BitBoard> {
+        let board = self.get_piece(colour, piece);
 
-        let mut result = vec![];
-        while board != 0 {
-            let lowest_occupied = board.trailing_zeros();
-            let square = 1 << lowest_occupied;
-            let square = BitBoard(square);
-
-            result.push(Square::try_from(square).unwrap());
-            board &= board - 1;
-        }
-
-        result
+        board.into_iter()
+            .map(|sq| self.get_pseudo_moves_single_piece(colour, piece, sq))
+            .map(|pseudo_moves| pseudo_moves & !self.get_sides_pieces(self.player_turn))
+            .reduce(|a,b| a | b)
     }
 
     pub fn get_attacks(&self, colour: Colour) -> BitBoard {
@@ -364,8 +282,8 @@ mod tests {
         pos
     }
 
-    fn castle(pos: &Position, side: CastleSide) -> Position {
-        pos.make_move(Move::Castle(side))
+    fn castle(pos: &Position, side: CastleSide, colour: Colour) -> Position {
+        pos.make_move(Move::Castle(side, colour))
             .unwrap_or_else(|e| panic!("{:?} castle failed: {}", side, e))
     }
 
@@ -397,7 +315,7 @@ mod tests {
 
     #[test]
     fn white_castles_kingside() {
-        let pos = castle(&play(&KINGSIDE_OPENING), CastleSide::King);
+        let pos = castle(&play(&KINGSIDE_OPENING), CastleSide::King, Colour::White);
 
         assert_squares(&pos, Colour::White, Piece::King, &[Square::G1]);
         assert_squares(&pos, Colour::White, Piece::Rook, &[Square::A1, Square::F1]);
@@ -409,7 +327,7 @@ mod tests {
     fn black_castles_kingside() {
         let mut moves = KINGSIDE_OPENING.to_vec();
         moves.push((Pawn, Square::D2, Square::D3));
-        let pos = castle(&play(&moves), CastleSide::King);
+        let pos = castle(&play(&moves), CastleSide::King, Colour::Black);
 
         assert_squares(&pos, Colour::Black, Piece::King, &[Square::G8]);
         assert_squares(&pos, Colour::Black, Piece::Rook, &[Square::A8, Square::F8]);
@@ -417,7 +335,7 @@ mod tests {
 
     #[test]
     fn white_castles_queenside() {
-        let pos = castle(&play(&QUEENSIDE_OPENING), CastleSide::Queen);
+        let pos = castle(&play(&QUEENSIDE_OPENING), CastleSide::Queen, Colour::White);
 
         assert_squares(&pos, Colour::White, Piece::King, &[Square::C1]);
         assert_squares(&pos, Colour::White, Piece::Rook, &[Square::D1, Square::H1]);
@@ -427,7 +345,7 @@ mod tests {
     fn black_castles_queenside() {
         let mut moves = QUEENSIDE_OPENING.to_vec();
         moves.push((Pawn, Square::E2, Square::E3));
-        let pos = castle(&play(&moves), CastleSide::Queen);
+        let pos = castle(&play(&moves), CastleSide::Queen, Colour::Black);
 
         assert_squares(&pos, Colour::Black, Piece::King, &[Square::C8]);
         assert_squares(&pos, Colour::Black, Piece::Rook, &[Square::D8, Square::H8]);

@@ -1,4 +1,5 @@
-use crate::game::{Move, NormalMove};
+use crate::game::{CastleSide, Move, NormalMove};
+use crate::game::Move::Castle;
 use crate::pieces::Piece;
 use crate::position::Position;
 
@@ -9,19 +10,24 @@ pub fn generate_valid_moves(position: &Position) -> Vec<Move> {
 
         for sq in board {
             let mvs = position.get_pseudo_moves_single_piece(position.player_turn, *piece, sq);
-            if let Some(pseudo_moves) = mvs {
-                let pseudo_moves = pseudo_moves & !position.get_sides_pieces(position.player_turn);
-                for mv in pseudo_moves {
-                    result.push(Move::Normal(
-                        NormalMove {
-                            piece: *piece,
-                            from: sq,
-                            to: mv,
-                        }
-                    ))
-                }
+            let pseudo_moves = mvs & !position.get_sides_pieces(position.player_turn);
+            for mv in pseudo_moves {
+                result.push(Move::Normal(
+                    NormalMove {
+                        piece: *piece,
+                        from: sq,
+                        to: mv,
+                    }
+                ))
             }
         }
+
+    }
+    if position.can_castle(position.player_turn, CastleSide::King) {
+        result.push(Castle(CastleSide::King, position.player_turn));
+    }
+    if position.can_castle(position.player_turn, CastleSide::Queen) {
+        result.push(Castle(CastleSide::Queen, position.player_turn));
     }
     result
 }

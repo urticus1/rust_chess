@@ -47,7 +47,7 @@ impl BitBoard {
         writeln!(f)
     }
 
-    pub fn shift(&self, direction: Direction) -> BitBoard {
+    pub const fn shift(&self, direction: Direction) -> BitBoard {
         match direction {
             Direction::Up => BitBoard(self.0 << 8),
             Direction::Down => BitBoard(self.0 >> 8),

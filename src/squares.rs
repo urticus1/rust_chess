@@ -1,5 +1,6 @@
 use crate::bitboard::{BitBoard};
-use crate::{COL_A, COL_H};
+use crate::{COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H, INTERIOR_SQUARES};
+use crate::{ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8};
 
 macro_rules! squares {
     ($($sq:ident => $i:literal),* $(,)?) => {
@@ -8,6 +9,7 @@ macro_rules! squares {
         pub enum Square {$($sq),*}
 
         const ALL: &[Square; 64] = &[$(Square::$sq),*];
+
 
         impl TryFrom<usize> for Square {
             type Error = ();
@@ -41,7 +43,6 @@ macro_rules! squares {
 }
 
 squares! {
-
     A1 => 0,
     B1 => 1,
     C1 => 2,
@@ -136,6 +137,7 @@ impl Square {
     }
 }
 
+
 impl Square {
     pub fn get_neighbour(self, direction: &Direction) -> Option<Square> {
         let index = self as u64;
@@ -144,58 +146,100 @@ impl Square {
                 if index > 55 {
                     None
                 } else {
-                    Some(Square::try_from(index + 8).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index + 8).unwrap())
                 }
             },
             Direction::Down => {
                 if index < 8 {
                     None
                 } else {
-                    Some(Square::try_from(index - 8).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index - 8).unwrap())
                 }
             },
             Direction::Left => {
                 if (1 << index & COL_A.0) != 0 {
                     None
                 } else {
-                    Some(Square::try_from(index - 1).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index - 1).unwrap())
                 }
             },
             Direction::Right => {
                 if (1 << index & COL_H.0) != 0 {
                     None
                 } else {
-                    Some(Square::try_from(index + 1).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index + 1).unwrap())
                 }
             },
             Direction::LeftUp => {
                 if (1 << index & COL_A.0) != 0 || index > 55 {
                     None
                 } else {
-                    Some(Square::try_from(index + 7).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index + 7).unwrap())
                 }
             },
             Direction::LeftDown => {
                 if (1 << index & COL_A.0) != 0 || index < 8 {
                     None
                 } else {
-                    Some(Square::try_from(index - 9).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index - 9).unwrap())
                 }
             },
             Direction::RightUp => {
                 if (1 << index & COL_H.0) != 0 || index > 55 {
                     None
                 } else {
-                    Some(Square::try_from(index + 9).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index + 9).unwrap())
                 }
             },
             Direction::RightDown => {
                 if (1 << index & COL_H.0) != 0 || index < 8 {
                     None
                 } else {
-                    Some(Square::try_from(index - 7).expect(format!("Tried to create square from index {}", index).as_str()))
+                    Some(Square::try_from(index - 7).unwrap())
                 }
             },
         }
     }
+
+    pub fn row_col(&self) -> (BitBoard, BitBoard) {
+        const ROWS: [BitBoard; 8] = [ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8];
+        const COLS: [BitBoard; 8] = [COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H];
+        let index = *self as usize;
+        (ROWS[index / 8], COLS[index % 8])
+    }
+
+    pub fn diagonals(&self) -> BitBoard {
+        let index = *self as usize;
+        let mut board = self.to_bitboard();
+        for dir in [(1,1), (-1 as i32,1), (-1 as i32,-1 as i32), (1,-1 as i32)].iter() {
+            let mut row = index as i32 / 8;
+            let mut col = index as i32 % 8;
+            loop {
+                row += dir.0;
+                col += dir.1;
+                if row > 7 || col > 7 || row < 0 || col < 0 {
+                    break;
+                }
+                let new_index = row * 8 + col;
+                board = board | Square::try_from(new_index as usize).unwrap().to_bitboard();
+            }
+        }
+        board
+    }
+
+    pub fn board_edge_squares(&self) -> BitBoard {
+        let i = *self as usize;
+        let bottom = i % 8;
+        let top = bottom + (8 * 7);
+        let left = 8 * (i / 8);
+        let right = left + 7;
+
+        let left = Square::try_from(left).unwrap();
+        let right = Square::try_from(right).unwrap();
+        let top = Square::try_from(top).unwrap();
+        let bottom = Square::try_from(bottom).unwrap();
+
+        bottom.to_bitboard() | top.to_bitboard() | left.to_bitboard() | right.to_bitboard()
+    }
+
 }

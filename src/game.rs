@@ -60,7 +60,7 @@ impl GameState {
             return Err(MoveError::new("No correct colour piece on square"));
         }
 
-        let pseudo_moves = self.pos.get_pseudo_moves_single_piece(self.pos.player_turn, mv.piece, mv.from);
+        let pseudo_moves = self.pos.get_pseudo_moves_single_piece_validated(self.pos.player_turn, mv.piece, mv.from);
         if pseudo_moves.is_none() {
             return Err(MoveError::new("No correct position piece on square"));
         }
