@@ -1,7 +1,30 @@
 use std::fmt;
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl};
-use crate::{COL_A, COL_H, ROW_1, ROW_8, ROW_MASK};
 use crate::squares::{Direction, Square};
+
+pub static ROW_MASK: u64 = 0b_11111111;
+
+pub static ROW_1: BitBoard = BitBoard(ROW_MASK);
+pub static ROW_2: BitBoard = BitBoard(ROW_MASK << 8);
+pub static ROW_3: BitBoard = BitBoard(ROW_MASK << 16);
+pub static ROW_4: BitBoard = BitBoard(ROW_MASK << 24);
+pub static ROW_5: BitBoard = BitBoard(ROW_MASK << 32);
+pub static ROW_6: BitBoard = BitBoard(ROW_MASK << 40);
+pub static ROW_7: BitBoard = BitBoard(ROW_MASK << 48);
+pub static ROW_8: BitBoard = BitBoard(ROW_MASK << 56);
+
+pub static COL_A: BitBoard = BitBoard(0b_0000000100000001000000010000000100000001000000010000000100000001 );
+pub static COL_B: BitBoard = BitBoard(0b_0000001000000010000000100000001000000010000000100000001000000010 );
+pub static COL_C: BitBoard = BitBoard(0b_0000010000000100000001000000010000000100000001000000010000000100 );
+pub static COL_D: BitBoard = BitBoard( 0b_0000100000001000000010000000100000001000000010000000100000001000 );
+pub static COL_E:  BitBoard = BitBoard(0b_0001000000010000000100000001000000010000000100000001000000010000 );
+pub static COL_F: BitBoard = BitBoard(0b_0010000000100000001000000010000000100000001000000010000000100000 );
+pub static COL_G: BitBoard = BitBoard(0b_0100000001000000010000000100000001000000010000000100000001000000 );
+pub static COL_H:  BitBoard = BitBoard(0b_1000000010000000100000001000000010000000100000001000000010000000 );
+
+pub static INTERIOR_SQUARES:  BitBoard = BitBoard(!(ROW_1.0 | ROW_8.0 | COL_A.0 | COL_H.0));
+
+
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub struct BitBoard(pub u64);
@@ -47,7 +70,7 @@ impl BitBoard {
         writeln!(f)
     }
 
-    pub const fn shift(&self, direction: Direction) -> BitBoard {
+    pub fn shift(&self, direction: Direction) -> BitBoard {
         match direction {
             Direction::Up => BitBoard(self.0 << 8),
             Direction::Down => BitBoard(self.0 >> 8),

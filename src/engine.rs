@@ -1,4 +1,3 @@
-use std::f32::INFINITY;
 use crate::game::Move;
 use crate::move_gen::generate_valid_moves;
 use crate::pieces::{bishop_moves_pext, rook_moves_pext, Colour, Piece, KNIGHT_MOVES};
@@ -64,7 +63,6 @@ heat_map!( KING_MAP {
 
 
 pub fn eval(position: &Position) -> f32 {
-
     let mut positional_score = 0.0;
     for player in [Colour::White, Colour::Black] {
         positional_score += Piece::ALL.iter()
@@ -92,11 +90,12 @@ pub fn eval(position: &Position) -> f32 {
 }
 
 pub fn get_best_move(position: &Position) -> (f32, Option<Move>) {
-    let node = search(6, position, -f32::INFINITY, f32::INFINITY);
+    let mut pos = position.clone();
+    let node = search(8, &mut pos, -f32::INFINITY, f32::INFINITY);
     (node.eval, node.mv)
 }
 
-fn search(depth: u8, position: &Position, mut alpha: f32, mut beta: f32) -> Node {
+fn search(depth: u8, position: &mut Position, mut alpha: f32, mut beta: f32) -> Node {
     if depth == 0 {
         return Node {
             mv: None,
@@ -113,26 +112,23 @@ fn search(depth: u8, position: &Position, mut alpha: f32, mut beta: f32) -> Node
     let next_moves = generate_valid_moves(position);
 
     if next_moves.is_empty() {
-        if is_check(position) && is_checkmate(position) {
-            return match position.player_turn {
+        return if is_check(position) {
+            match position.player_turn {
                 Colour::White => {
                     Node {
                         mv: best_move,
                         eval: f32::INFINITY,
-
                     }
                 },
                 Colour::Black => {
                     Node {
                         mv: best_move,
                         eval: f32::NEG_INFINITY,
-
                     }
                 }
             }
-        }
-        else {
-            return Node {
+        } else {
+            Node {
                 mv: best_move,
                 eval: 0.0,
             }
@@ -140,9 +136,9 @@ fn search(depth: u8, position: &Position, mut alpha: f32, mut beta: f32) -> Node
     }
 
     for mv in next_moves {
-        let new_pos = position.make_move(mv);
-        if let Ok(valid_pos) = new_pos {
-            let node = search(depth - 1, &valid_pos, alpha, beta);
+        if let Some(mv) = mv {
+            let mut new_pos = position.make_move(mv);
+            let node = search(depth - 1, &mut new_pos, alpha, beta);
             match position.player_turn {
                 Colour::White => {
                     alpha = alpha.max(node.eval);
@@ -167,6 +163,9 @@ fn search(depth: u8, position: &Position, mut alpha: f32, mut beta: f32) -> Node
                     }
                 }
             }
+        }
+        else {
+            break;
         }
     }
 
@@ -195,14 +194,6 @@ fn material_score(position: &Position, colour: Colour) -> f32 {
     + bishops * BISHOP_VALUE
     + rooks * ROOK_VALUE
     + queens * QUEEN_VALUE
-}
-
-fn is_checkmate(position: &Position) -> bool { //TODO finish this
-    let enemy_attacks = position.get_attacks(position.player_turn.other());
-    let blockers = position.get_sides_pieces(position.player_turn);
-    let king = position.get_piece(position.player_turn, Piece::King);
-    //let king_moves = king_moves(king);
-    enemy_attacks.intersects(king) //&& (king_moves & !blockers & !enemy_attacks).is_empty()
 }
 
 fn is_check(position: &Position) -> bool {

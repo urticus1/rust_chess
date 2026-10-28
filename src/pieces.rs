@@ -1,13 +1,32 @@
 use std::arch::x86_64::_pext_u64;
 use std::sync::LazyLock;
-use crate::bitboard::{BitBoard};
-use crate::{INTERIOR_SQUARES, ROW_2, ROW_7};
+use crate::bitboard::{BitBoard, INTERIOR_SQUARES, ROW_2, ROW_7};
 use crate::pieces::Piece::{Bishop, King, Knight, Pawn, Queen, Rook};
 use crate::squares::{Direction, Square};
 use crate::position::Position;
 use crate::squares::Square::H8;
 
-const fn create_knight_moves() -> [BitBoard; 64] {
+static  ROOK_OFFSETS: [usize; 64] = [
+    0, 4096, 8192, 12288, 16384, 20480, 24576, 28672,
+    32768, 36864, 37888, 38912, 39936, 40960, 41984, 43008,
+    47104, 51200, 52224, 53248, 54272, 55296, 56320, 57344,
+    61440, 65536, 66560, 67584, 68608, 69632, 70656, 71680,
+    75776, 79872, 80896, 81920, 82944, 83968, 84992, 86016,
+    90112, 94208, 95232, 96256, 97280, 98304, 99328, 100352,
+    104448, 108544, 109568, 110592, 111616, 112640, 113664, 114688,
+    118784, 122880, 126976, 131072, 135168, 139264, 143360, 147456,
+];
+
+pub static KNIGHT_MOVES: LazyLock<[BitBoard; 64]> = LazyLock::new(create_knight_moves);
+pub static KING_MOVES: LazyLock<[BitBoard; 64]> = LazyLock::new(create_king_moves);
+
+static ROOK_MOVES: LazyLock<Vec<BitBoard>> = LazyLock::new(generate_all_rook_move_sets);
+static BISHOP_MOVES: LazyLock<Vec<BitBoard>> = LazyLock::new(generate_all_bishop_move_sets);
+
+static DIAGONAL_SLIDE_MASKS: LazyLock<[BitBoard; 64]> = LazyLock::new(generate_diagonal_masks);
+static HORIZONTAL_SLIDE_MASKS: LazyLock<[BitBoard; 64]> = LazyLock::new(generate_horizontal_masks);
+
+fn create_knight_moves() -> [BitBoard; 64] {
     let mut boards = [BitBoard(0); 64];
     let mut i = 0;
     while i < 64 {
@@ -17,7 +36,7 @@ const fn create_knight_moves() -> [BitBoard; 64] {
     boards
 }
 
-const fn create_king_moves() -> [BitBoard; 64] {
+fn create_king_moves() -> [BitBoard; 64] {
     let mut boards = [BitBoard(0); 64];
     let mut i = 0;
     while i < 64 {
@@ -27,7 +46,7 @@ const fn create_king_moves() -> [BitBoard; 64] {
     boards
 }
 
-pub fn generate_all_rook_move_sets() -> Vec<BitBoard> {
+fn generate_all_rook_move_sets() -> Vec<BitBoard> {
     let mut moves = vec![];
     for sq in BitBoard(u64::MAX) {
         for blockers in generate_rook_blockers_from_square(sq) {
@@ -37,7 +56,7 @@ pub fn generate_all_rook_move_sets() -> Vec<BitBoard> {
     moves
 }
 
-pub fn generate_all_bishop_move_sets() -> Vec<BitBoard> {
+fn generate_all_bishop_move_sets() -> Vec<BitBoard> {
     let size = 2usize.pow(9);
     let mut moves = vec![BitBoard(0); size * 64];
     for sq in BitBoard(u64::MAX) {
@@ -49,28 +68,17 @@ pub fn generate_all_bishop_move_sets() -> Vec<BitBoard> {
     moves
 }
 
-const ROOK_OFFSETS: [usize; 64] = [
-    0, 4096, 8192, 12288, 16384, 20480, 24576, 28672,
-    32768, 36864, 37888, 38912, 39936, 40960, 41984, 43008,
-    47104, 51200, 52224, 53248, 54272, 55296, 56320, 57344,
-    61440, 65536, 66560, 67584, 68608, 69632, 70656, 71680,
-    75776, 79872, 80896, 81920, 82944, 83968, 84992, 86016,
-    90112, 94208, 95232, 96256, 97280, 98304, 99328, 100352,
-    104448, 108544, 109568, 110592, 111616, 112640, 113664, 114688,
-    118784, 122880, 126976, 131072, 135168, 139264, 143360, 147456,
-];
 
 pub fn rook_moves_pext(sq: Square, blockers: BitBoard) -> BitBoard {
-    let (row, col) = sq.row_col();
-    let mask = (row | col) & !(sq.board_edge_squares() ^ sq.to_bitboard()) & !sq.to_bitboard(); //TODO cache these
+    let mask = HORIZONTAL_SLIDE_MASKS[sq as usize];
     unsafe {
         let i = _pext_u64(blockers.0, mask.0) as usize + ROOK_OFFSETS[sq as usize];
-        return ROOK_MOVES[i];
+        ROOK_MOVES[i]
     }
 }
 
 pub fn bishop_moves_pext(sq: Square, blockers: BitBoard) -> BitBoard {
-    let mask = DIAGONALS[sq as usize] & INTERIOR_SQUARES & !sq.to_bitboard();
+    let mask = DIAGONAL_SLIDE_MASKS[sq as usize];
     let offset = (sq as usize) * 2_usize.pow(9);
     unsafe {
         let i = _pext_u64(blockers.0, mask.0) as usize + offset;
@@ -82,11 +90,9 @@ fn generate_rook_blockers_from_square(square: Square) -> Vec<BitBoard> {
     let size = if square == H8 { 4096 } else { ROOK_OFFSETS[square as usize + 1] - ROOK_OFFSETS[square as usize] };
     let mut blockers = vec![BitBoard(0); size];
     let mut permutation = 0u64;
-    let (row, col) = square.row_col();
     //println!("{:?} {}",square, square.board_edge_squares());
-    let mask = (row | col) & !(square.board_edge_squares() ^ square.to_bitboard()) & !square.to_bitboard();
+    let mask = HORIZONTAL_SLIDE_MASKS[square as usize].0;
     //println!("{}", mask);
-    let mask = mask.0;
     loop {
 
         let b = permutation.wrapping_sub(mask) & mask;
@@ -108,11 +114,7 @@ fn generate_bishop_blockers_from_square(square: Square) -> Vec<BitBoard> {
     let size = 2_usize.pow(9);
     let mut blockers = vec![BitBoard(0); size];
     let mut permutation = 0u64;
-    let diagonals = DIAGONALS[square as usize];
-    //println!("{:?} {}",square, square.board_edge_squares());
-    let mask = diagonals & INTERIOR_SQUARES & !square.to_bitboard();
-    //println!("{}", mask);
-    let mask = mask.0;
+    let mask = DIAGONAL_SLIDE_MASKS[square as usize].0;
     loop {
         let b = permutation.wrapping_sub(mask) & mask;
         permutation = b;
@@ -132,17 +134,19 @@ fn generate_bishop_blockers_from_square(square: Square) -> Vec<BitBoard> {
 fn generate_diagonal_masks() -> [BitBoard; 64] {
     let mut masks = [BitBoard(0u64); 64];
     BitBoard(u64::MAX).into_iter().enumerate().for_each(|(i, sq)| {
-        masks[i] = sq.diagonals();
+        masks[i] = sq.diagonals() & INTERIOR_SQUARES & !sq.to_bitboard();
     });
     masks
 }
 
-pub const KNIGHT_MOVES: [BitBoard; 64] = create_knight_moves();
-const KING_MOVES: [BitBoard; 64] = create_king_moves();
-pub static ROOK_MOVES: LazyLock<Vec<BitBoard>> = LazyLock::new(generate_all_rook_move_sets);
-pub static BISHOP_MOVES: LazyLock<Vec<BitBoard>> = LazyLock::new(generate_all_bishop_move_sets);
-
-static DIAGONALS: LazyLock<[BitBoard; 64]> = LazyLock::new(generate_diagonal_masks);
+fn generate_horizontal_masks() -> [BitBoard; 64] {
+    let mut masks = [BitBoard(0u64); 64];
+    BitBoard(u64::MAX).into_iter().enumerate().for_each(|(i, sq)| {
+        let (row, col) = sq.row_col();
+        masks[i] = (row | col) & !(sq.board_edge_squares() ^ sq.to_bitboard()) & !sq.to_bitboard();;
+    });
+    masks
+}
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Piece {
@@ -175,14 +179,13 @@ impl Colour {
 
 impl Piece {
     pub fn get_pseudo_moves(&self, position: &Position, piece_pos: Square, pieces: BitBoard, colour: Colour) -> BitBoard {
-
         match self {
-            Piece::Pawn => single_pawn_moves(piece_pos.to_bitboard(), position, colour) | (single_pawn_pseudo_attacks(piece_pos.to_bitboard(), colour) & position.get_sides_pieces(colour.other())),
-            Piece::Knight => KNIGHT_MOVES[piece_pos as usize],
-            Piece::Bishop => bishop_moves_pext(piece_pos, pieces),
-            Piece::Rook => rook_moves_pext(piece_pos, pieces),
-            Piece::Queen => bishop_moves_pext(piece_pos, pieces) | rook_moves_pext(piece_pos, pieces),
-            Piece::King => KING_MOVES[piece_pos as usize],
+            Pawn => single_pawn_moves(piece_pos.to_bitboard(), position, colour) | (single_pawn_pseudo_attacks(piece_pos.to_bitboard(), colour) & position.get_sides_pieces(colour.other())),
+            Knight => KNIGHT_MOVES[piece_pos as usize],
+            Bishop => bishop_moves_pext(piece_pos, pieces),
+            Rook => rook_moves_pext(piece_pos, pieces),
+            Queen => bishop_moves_pext(piece_pos, pieces) | rook_moves_pext(piece_pos, pieces),
+            King => KING_MOVES[piece_pos as usize],
         }
     }
 }
@@ -209,6 +212,7 @@ fn single_pawn_pseudo_attacks(pawn: BitBoard, colour: Colour) -> BitBoard {
         Colour::Black => pawn.shift(Direction::LeftDown) | pawn.shift(Direction::RightDown),
     }
 }
+
 pub fn all_pawn_attacks(pos: &Position, colour: Colour) -> BitBoard {
     let board = pos.get_piece_board(colour, Piece::Pawn);
 
@@ -218,52 +222,32 @@ pub fn all_pawn_attacks(pos: &Position, colour: Colour) -> BitBoard {
     }
 }
 
-//TODO add castling in here?
-const fn king_moves(pos: BitBoard) -> BitBoard {
-    let board = pos.shift(Direction::Up).0
-    | pos.shift(Direction::Down).0
-    | pos.shift(Direction::Left).0
-    | pos.shift(Direction::Right).0
-    | pos.shift(Direction::LeftUp).0
-    | pos.shift(Direction::RightDown).0
-    | pos.shift(Direction::LeftDown).0
-    | pos.shift(Direction::RightUp).0;
-    BitBoard(board)
+fn king_moves(pos: BitBoard) -> BitBoard {
+    pos.shift(Direction::Up)
+    | pos.shift(Direction::Down)
+    | pos.shift(Direction::Left)
+    | pos.shift(Direction::Right)
+    | pos.shift(Direction::LeftUp)
+    | pos.shift(Direction::RightDown)
+    | pos.shift(Direction::LeftDown)
+    | pos.shift(Direction::RightUp)
 }
 
-const fn knight_moves(pos: BitBoard) -> BitBoard {
-    let board = pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Right).0
-        | pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Left).0
-        | pos.shift(Direction::Down).shift(Direction::Down).shift(Direction::Right).0
-        | pos.shift(Direction::Down).shift(Direction::Down).shift(Direction::Left).0
+fn knight_moves(pos: BitBoard) -> BitBoard {
+    pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Right)
+    | pos.shift(Direction::Up).shift(Direction::Up).shift(Direction::Left)
+    | pos.shift(Direction::Down).shift(Direction::Down).shift(Direction::Right)
+    | pos.shift(Direction::Down).shift(Direction::Down).shift(Direction::Left)
 
-        | pos.shift(Direction::Left).shift(Direction::Left).shift(Direction::Up).0
-        | pos.shift(Direction::Left).shift(Direction::Left).shift(Direction::Down).0
-        | pos.shift(Direction::Right).shift(Direction::Right).shift(Direction::Up).0
-        | pos.shift(Direction::Right).shift(Direction::Right).shift(Direction::Down).0;
-    BitBoard(board)
+    | pos.shift(Direction::Left).shift(Direction::Left).shift(Direction::Up)
+    | pos.shift(Direction::Left).shift(Direction::Left).shift(Direction::Down)
+    | pos.shift(Direction::Right).shift(Direction::Right).shift(Direction::Up)
+    | pos.shift(Direction::Right).shift(Direction::Right).shift(Direction::Down)
 }
 
 pub fn rook_moves(pos: Square, pieces: BitBoard) -> BitBoard {
     let mut result = BitBoard (0 );
     for dir in [Direction::Up, Direction::Down, Direction::Right, Direction::Left] {
-        let mut next = pos.get_neighbour(&dir);
-        while next.is_some() {
-            let current = next.unwrap();
-            let pos_bitboard = current.to_bitboard();
-            result = &result | &pos_bitboard;
-            next = current.get_neighbour(&dir);
-            if (pieces & pos_bitboard).0 != 0 {
-                break;
-            }
-        }
-    }
-    result
-}
-
-pub fn queen_moves(pos: Square, pieces: BitBoard) -> BitBoard {
-    let mut result = BitBoard (0 );
-    for dir in [Direction::LeftUp, Direction::LeftDown, Direction::RightUp, Direction::RightDown, Direction::Down, Direction::Up, Direction::Left, Direction::Right] {
         let mut next = pos.get_neighbour(&dir);
         while next.is_some() {
             let current = next.unwrap();
@@ -332,7 +316,7 @@ mod tests {
         }
 
         fn pext(sq: Square, blockers: BitBoard, table: &Vec<BitBoard>) -> BitBoard {
-            unsafe { rook_moves_pext(sq, blockers, table) }
+            unsafe { rook_moves_pext(sq, blockers) }
         }
 
         #[test]

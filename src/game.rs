@@ -24,9 +24,7 @@ impl GameState {
                 if let Err(err) = self.validate_normal_move(mv) {
                     return Err(err);
                 }
-                if let Err(err) = self.pos.make_normal_move(mv) {
-                    return Err(err);
-                }
+                self.pos.make_normal_move(mv);
             },
             Move::Castle(side, colour) => {
                 if let Err(err) = self.validate_castle_move(colour, side) {
@@ -36,13 +34,8 @@ impl GameState {
             }
         }
         let res = current.make_move(m);
-        return match res {
-            Ok(position) => {
-                self.pos = position;
-                Ok(())
-            },
-            Err(e) => Err(e)
-        };
+        self.pos = res;
+        Ok(())
     }
 
     fn validate_castle_move(&self, colour: Colour, side: CastleSide) -> Result<(), MoveError> {

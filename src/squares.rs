@@ -1,6 +1,4 @@
-use crate::bitboard::{BitBoard};
-use crate::{COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H, INTERIOR_SQUARES};
-use crate::{ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8};
+use crate::bitboard::{BitBoard, COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H, ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8};
 
 macro_rules! squares {
     ($($sq:ident => $i:literal),* $(,)?) => {
@@ -110,11 +108,14 @@ squares! {
 }
 
 impl TryFrom<BitBoard> for Square {
-    type Error = ();
+    type Error = String;
 
     fn try_from(value: BitBoard) -> Result<Self, Self::Error> {
-        if value.0 == 0 || value.count_ones() != 1 {
-            return Err(());
+        if value.0 == 0 {
+            return Err("The board is empty".to_string());
+        }
+        if value.count_ones() != 1 {
+            return Err("The board is not a single square".to_string());
         }
         Ok(Square::try_from(value.0.trailing_zeros() as usize).expect("Invalid index for square"))
     }
@@ -202,10 +203,10 @@ impl Square {
     }
 
     pub fn row_col(&self) -> (BitBoard, BitBoard) {
-        const ROWS: [BitBoard; 8] = [ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8];
-        const COLS: [BitBoard; 8] = [COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H];
+        let rows: [BitBoard; 8] = [ROW_1, ROW_2, ROW_3, ROW_4, ROW_5, ROW_6, ROW_7, ROW_8];
+        let cols: [BitBoard; 8] = [COL_A, COL_B, COL_C, COL_D, COL_E, COL_F, COL_G, COL_H];
         let index = *self as usize;
-        (ROWS[index / 8], COLS[index % 8])
+        (rows[index / 8], cols[index % 8])
     }
 
     pub fn diagonals(&self) -> BitBoard {

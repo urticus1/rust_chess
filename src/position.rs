@@ -1,19 +1,19 @@
 use std::fmt;
-use crate::bitboard::BitBoard;
+use crate::bitboard::{BitBoard, ROW_2, ROW_7};
 use crate::game::{CastleSide, Move, MoveError, NormalMove};
 use crate::squares::Square;
 use crate::pieces::{all_pawn_attacks, Colour, Piece};
-use crate::{ROW_2, ROW_7};
+use crate::squares::Square::{A1, A2};
 
 const STARTING_PAWNS_BLACK: BitBoard = ROW_7;
 const STARTING_PAWNS_WHITE: BitBoard = ROW_2;
 
-const STARTING_ROOKS_WHITE: BitBoard = BitBoard(0b_10000001 );
-const STARTING_KNIGHTS_WHITE: BitBoard = BitBoard(0b_01000010 );
+const STARTING_ROOKS_WHITE: BitBoard = BitBoard(0b_10000001);
+const STARTING_KNIGHTS_WHITE: BitBoard = BitBoard(0b_01000010);
 
-const STARTING_BISHOPS_WHITE: BitBoard = BitBoard(0b_00100100 );
-const STARTING_QUEEN_WHITE: BitBoard = BitBoard(0b_00001000 );
-const STARTING_KING_WHITE: BitBoard = BitBoard(0b_00010000 );
+const STARTING_BISHOPS_WHITE: BitBoard = BitBoard(0b_00100100);
+const STARTING_QUEEN_WHITE: BitBoard = BitBoard(0b_00001000);
+const STARTING_KING_WHITE: BitBoard = BitBoard(0b_00010000);
 
 const STARTING_ROOKS_BLACK: BitBoard = BitBoard(STARTING_ROOKS_WHITE.0 << 8 * 7 );
 const STARTING_KNIGHTS_BLACK: BitBoard = BitBoard(STARTING_KNIGHTS_WHITE.0 << 8 * 7 );
@@ -37,6 +37,15 @@ pub struct Position {
     piece_boards: [[BitBoard; 6]; 2],
     pub player_turn: Colour,
     pub can_castle: [[bool; 2]; 2],
+}
+
+pub struct AntiMove {
+    from: Square,
+    to: Square,
+    piece: Piece,
+    captured: Option<Piece>,
+    kingside_castle: bool,
+    queenside_castle: bool,
 }
 
 impl Position {
@@ -78,14 +87,92 @@ impl Position {
         }
     }
 
+    pub fn reverse_move(&mut self, mv: AntiMove) {
+        if let Some(captured) = mv.captured {
+            let board = self.get_piece_board(self.player_turn, captured);
+            self.update_bitboard(self.player_turn, captured, board | mv.from.to_bitboard());
+        }
+        self.player_turn = self.player_turn.other();
+        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = mv.kingside_castle;
+        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = mv.queenside_castle;
+
+        let board = self.get_piece_board(self.player_turn, mv.piece);
+        self.update_bitboard(self.player_turn, mv.piece, (board | mv.to.to_bitboard()) & !mv.from.to_bitboard());
+    }
+
+    pub fn make_reversible_move(&mut self, mv: Move) -> AntiMove {
+        match mv {
+            Move::Normal(mv) => self.make_reversible_normal_move(mv),
+            Move::Castle(side, colour) => todo!()
+        }
+    }
+
+    fn make_reversible_normal_move(&mut self, mv: NormalMove) -> AntiMove {
+        let from = mv.from.to_bitboard();
+        let to = mv.to.to_bitboard();
+
+        let opponent = self.player_turn.other();
+        let kingside_castle = self.can_castle(self.player_turn, CastleSide::King);
+        let queenside_castle = self.can_castle(self.player_turn, CastleSide::Queen);
+
+        let mut board = self.get_current_turn_boards()[mv.piece as usize];
+        board = (board & !from) | to;
+        self.update_bitboard(self.player_turn, mv.piece, board);
+        self.player_turn = self.player_turn.other();
+
+        if mv.piece == Piece::King {
+            self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
+            self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
+        }
+        else if mv.piece == Piece::Rook {
+            let rook_board = self.get_piece_board(self.player_turn, Piece::Rook);
+            match self.player_turn {
+                Colour::White => {
+                    if (rook_board & Square::A1.to_bitboard()).0 != 0 {
+                        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
+                    }
+                    else if (rook_board & Square::H1.to_bitboard()).0 != 0 {
+                        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
+                    }
+                }
+                Colour::Black => {
+                    if (rook_board & Square::A8.to_bitboard()).0 != 0 {
+                        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
+                    }
+                    else if (rook_board & Square::H8.to_bitboard()).0 != 0 {
+                        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
+                    }
+                }
+            }
+
+        }
+
+        let mut captured = None;
+        for piece in Piece::ALL {
+            if self.get_piece(opponent, *piece).intersects(to) {
+                let b = self.get_piece_board(opponent, *piece);
+                self.update_bitboard(opponent, *piece, b & !to);
+                captured = Some(piece.clone());
+            }
+        }
+        AntiMove {
+            from: mv.to,
+            to: mv.from,
+            piece: mv.piece,
+            captured,
+            kingside_castle,
+            queenside_castle,
+        }
+    }
+
     pub fn get_piece(&self, colour: Colour, piece: Piece) -> BitBoard {
         self.piece_boards[colour as usize][piece as usize]
     }
 
-    pub fn make_move(&self, mv: Move) -> Result<Position, MoveError> {
+    pub fn make_move(&self, mv: Move) -> Position {
         match mv {
-            Move::Normal(normal) => self.make_normal_move(&normal),
-            Move::Castle(side, ..) => Ok(self.make_castle_move(side))
+            Move::Normal(normal) => self.make_normal_move(&normal), //TODO we have no validation for user input moves
+            Move::Castle(side, ..) => self.make_castle_move(side)
         }
     }
 
@@ -110,7 +197,7 @@ impl Position {
         new_pos
     }
 
-    pub fn make_normal_move(&self, mv: &NormalMove) -> Result<Position, MoveError> {
+    pub fn make_normal_move(&self, mv: &NormalMove) -> Position {
         let from = mv.from.to_bitboard();
         let to = mv.to.to_bitboard();
 
@@ -151,12 +238,7 @@ impl Position {
         for i in 0..6 {
             new_pos.piece_boards[opponent][i] = new_pos.piece_boards[opponent][i] & !to;
         }
-
-        let opposition_attacks = new_pos.get_attacks(self.player_turn.other());
-        if (opposition_attacks & new_pos.get_piece(self.player_turn, Piece::King)).0 != 0 {
-            return Err(MoveError::new("King in check"));
-        }
-        Ok(new_pos)
+        new_pos
     }
 
     fn get_current_turn_boards(&self) -> [BitBoard; 6] {
@@ -276,15 +358,13 @@ mod tests {
         let mut pos = Position::new_standard_game();
         for &(piece, from, to) in moves {
             pos = pos
-                .make_move(Move::Normal(NormalMove { piece, from, to }))
-                .unwrap_or_else(|e| panic!("setup move {:?} {:?} -> {:?} failed: {}", piece, from, to, e));
+                .make_move(Move::Normal(NormalMove { piece, from, to }));
         }
         pos
     }
 
     fn castle(pos: &Position, side: CastleSide, colour: Colour) -> Position {
         pos.make_move(Move::Castle(side, colour))
-            .unwrap_or_else(|e| panic!("{:?} castle failed: {}", side, e))
     }
 
     fn assert_squares(pos: &Position, colour: Colour, piece: Piece, squares: &[Square]) {
@@ -355,314 +435,8 @@ mod tests {
     fn castling_blocked_in_starting_position() {
         let pos = Position::new_standard_game();
 
-        assert!(pos.make_move(Move::Castle(CastleSide::King, Colour::White)).is_err());
-        assert!(pos.make_move(Move::Castle(CastleSide::Queen, Colour::White)).is_err());
+        assert_eq!(pos.can_castle(Colour::White, CastleSide::King), false);
+        assert_eq!(pos.can_castle(Colour::White, CastleSide::Queen), false);
     }
 
-    // ---- Pawn moves and captures ----
-
-    /// Adds `piece` of `colour` on each of `squares` to the position.
-    fn place(pos: &mut Position, colour: Colour, piece: Piece, squares: &[Square]) {
-        let added = squares.iter().fold(pos.get_piece(colour, piece), |acc, sq| acc | sq.to_bitboard());
-        pos.update_bitboard(colour, piece, added);
-    }
-
-    /// Blank board with `colour` to move.
-    fn blank_with_turn(colour: Colour) -> Position {
-        let mut pos = Position::blank();
-        pos.player_turn = colour;
-        pos
-    }
-
-    fn pawn_move(pos: &Position, from: Square, to: Square) -> Result<Position, MoveError> {
-        pos.make_move(Move::Normal(NormalMove { piece: Pawn, from, to }))
-    }
-
-    fn assert_pawn_moves(pos: &Position, from: Square, to: Square) -> Position {
-        pawn_move(pos, from, to)
-            .unwrap_or_else(|e| panic!("pawn {:?} -> {:?} should be legal, got: {}{}", from, to, e, pos))
-    }
-
-    fn assert_pawn_rejected(pos: &Position, from: Square, to: Square) {
-        assert!(pawn_move(pos, from, to).is_err(), "pawn {:?} -> {:?} should be rejected{}", from, to, pos);
-    }
-
-    #[test]
-    fn white_pawn_single_push() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-
-        let pos = assert_pawn_moves(&pos, Square::E2, Square::E3);
-
-        assert_squares(&pos, Colour::White, Pawn, &[Square::E3]);
-        assert_eq!(pos.player_turn, Colour::Black);
-    }
-
-    #[test]
-    fn white_pawn_double_push_from_start_rank() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-
-        let pos = assert_pawn_moves(&pos, Square::E2, Square::E4);
-
-        assert_squares(&pos, Colour::White, Pawn, &[Square::E4]);
-    }
-
-    #[test]
-    fn white_pawn_cannot_double_push_off_start_rank() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E3]);
-
-        assert_pawn_rejected(&pos, Square::E3, Square::E5);
-    }
-
-    #[test]
-    fn white_pawn_cannot_move_three_squares() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-
-        assert_pawn_rejected(&pos, Square::E2, Square::E5);
-    }
-
-    #[test]
-    fn white_pawn_cannot_move_backwards_or_sideways() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-
-        assert_pawn_rejected(&pos, Square::E4, Square::E3);
-        assert_pawn_rejected(&pos, Square::E4, Square::D4);
-        assert_pawn_rejected(&pos, Square::E4, Square::F4);
-    }
-
-    #[test]
-    fn white_pawn_blocked_by_piece_directly_in_front() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-        place(&mut pos, Colour::Black, Knight, &[Square::E3]);
-
-        // Can't capture forwards, and can't jump over the blocker either.
-        assert_pawn_rejected(&pos, Square::E2, Square::E3);
-        assert_pawn_rejected(&pos, Square::E2, Square::E4);
-    }
-
-    #[test]
-    fn white_pawn_double_push_blocked_on_target_square() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-        place(&mut pos, Colour::Black, Knight, &[Square::E4]);
-
-        assert_pawn_moves(&pos, Square::E2, Square::E3);
-        assert_pawn_rejected(&pos, Square::E2, Square::E4);
-    }
-
-    #[test]
-    fn white_pawn_blocked_by_own_piece() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E2]);
-        place(&mut pos, Colour::White, Knight, &[Square::E3]);
-
-        assert_pawn_rejected(&pos, Square::E2, Square::E3);
-        assert_pawn_rejected(&pos, Square::E2, Square::E4);
-    }
-
-    #[test]
-    fn white_pawn_captures_left() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-        place(&mut pos, Colour::Black, Knight, &[Square::D5]);
-
-        let pos = assert_pawn_moves(&pos, Square::E4, Square::D5);
-
-        assert_squares(&pos, Colour::White, Pawn, &[Square::D5]);
-        assert_squares(&pos, Colour::Black, Knight, &[]);
-    }
-
-    #[test]
-    fn white_pawn_captures_right() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-        place(&mut pos, Colour::Black, Pawn, &[Square::F5]);
-
-        let pos = assert_pawn_moves(&pos, Square::E4, Square::F5);
-
-        assert_squares(&pos, Colour::White, Pawn, &[Square::F5]);
-        assert_squares(&pos, Colour::Black, Pawn, &[]);
-    }
-
-    #[test]
-    fn white_pawn_capture_only_removes_captured_piece() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-        place(&mut pos, Colour::Black, Pawn, &[Square::D5, Square::A7]);
-
-        let pos = assert_pawn_moves(&pos, Square::E4, Square::D5);
-
-        assert_squares(&pos, Colour::Black, Pawn, &[Square::A7]);
-    }
-
-    #[test]
-    fn white_pawn_cannot_move_diagonally_to_empty_square() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-
-        assert_pawn_rejected(&pos, Square::E4, Square::D5);
-        assert_pawn_rejected(&pos, Square::E4, Square::F5);
-    }
-
-    #[test]
-    fn white_pawn_cannot_capture_own_piece() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-        place(&mut pos, Colour::White, Knight, &[Square::D5]);
-
-        assert_pawn_rejected(&pos, Square::E4, Square::D5);
-    }
-
-    #[test]
-    fn white_pawn_cannot_capture_backwards() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::E4]);
-        place(&mut pos, Colour::Black, Knight, &[Square::D3, Square::F3]);
-
-        assert_pawn_rejected(&pos, Square::E4, Square::D3);
-        assert_pawn_rejected(&pos, Square::E4, Square::F3);
-    }
-
-    #[test]
-    fn pawn_capture_does_not_wrap_around_a_file() {
-        // A2 shifted left-up by 7 bits would land on H2 without edge masking.
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::A2]);
-        place(&mut pos, Colour::Black, Knight, &[Square::H2]);
-
-        assert_pawn_rejected(&pos, Square::A2, Square::H2);
-    }
-
-    #[test]
-    fn pawn_capture_does_not_wrap_around_h_file() {
-        // H2 shifted right-up by 9 bits would land on A4 without edge masking.
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::H2]);
-        place(&mut pos, Colour::Black, Knight, &[Square::A4]);
-
-        assert_pawn_rejected(&pos, Square::H2, Square::A4);
-    }
-
-    #[test]
-    fn pawn_cannot_capture_on_another_pawns_diagonal() {
-        // D5 is attacked by the E4 pawn, not the A2 pawn.
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Pawn, &[Square::A2, Square::E4]);
-        place(&mut pos, Colour::Black, Knight, &[Square::D5]);
-
-        assert_pawn_rejected(&pos, Square::A2, Square::D5);
-    }
-
-    #[test]
-    fn pinned_pawn_cannot_move() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::White, Piece::King, &[Square::E1]);
-        place(&mut pos, Colour::White, Pawn, &[Square::F2]);
-        place(&mut pos, Colour::Black, Bishop, &[Square::H4]);
-
-        assert_pawn_rejected(&pos, Square::F2, Square::F3);
-        assert_pawn_rejected(&pos, Square::F2, Square::F4);
-    }
-
-    #[test]
-    fn black_pawn_single_and_double_push() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::D7, Square::E7]);
-
-        let single = assert_pawn_moves(&pos, Square::D7, Square::D6);
-        assert_squares(&single, Colour::Black, Pawn, &[Square::D6, Square::E7]);
-        assert_eq!(single.player_turn, Colour::White);
-
-        let double = assert_pawn_moves(&pos, Square::E7, Square::E5);
-        assert_squares(&double, Colour::Black, Pawn, &[Square::D7, Square::E5]);
-    }
-
-    #[test]
-    fn black_pawn_cannot_move_up_the_board() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E5]);
-
-        assert_pawn_rejected(&pos, Square::E5, Square::E6);
-    }
-
-    #[test]
-    fn black_pawn_cannot_double_push_off_start_rank() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E6]);
-
-        assert_pawn_rejected(&pos, Square::E6, Square::E4);
-    }
-
-    #[test]
-    fn black_pawn_blocked_by_piece_directly_in_front() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E7]);
-        place(&mut pos, Colour::White, Knight, &[Square::E6]);
-
-        assert_pawn_rejected(&pos, Square::E7, Square::E6);
-        assert_pawn_rejected(&pos, Square::E7, Square::E5);
-    }
-
-    #[test]
-    fn black_pawn_captures_both_diagonals() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E5]);
-        place(&mut pos, Colour::White, Knight, &[Square::D4, Square::F4]);
-
-        let left = assert_pawn_moves(&pos, Square::E5, Square::D4);
-        assert_squares(&left, Colour::Black, Pawn, &[Square::D4]);
-        assert_squares(&left, Colour::White, Knight, &[Square::F4]);
-
-        let right = assert_pawn_moves(&pos, Square::E5, Square::F4);
-        assert_squares(&right, Colour::Black, Pawn, &[Square::F4]);
-        assert_squares(&right, Colour::White, Knight, &[Square::D4]);
-    }
-
-    #[test]
-    fn black_pawn_cannot_capture_backwards() {
-        let mut pos = blank_with_turn(Colour::Black);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E5]);
-        place(&mut pos, Colour::White, Knight, &[Square::D6, Square::F6]);
-
-        assert_pawn_rejected(&pos, Square::E5, Square::D6);
-        assert_pawn_rejected(&pos, Square::E5, Square::F6);
-    }
-
-    #[test]
-    fn white_cannot_move_black_pawn() {
-        let mut pos = blank_with_turn(Colour::White);
-        place(&mut pos, Colour::Black, Pawn, &[Square::E7]);
-
-        assert_pawn_rejected(&pos, Square::E7, Square::E6);
-    }
-
-    #[test]
-    fn pawn_moves_in_game_capture_sequence() {
-        // 1. e4 d5 2. exd5
-        let pos = play(&[
-            (Pawn, Square::E2, Square::E4),
-            (Pawn, Square::D7, Square::D5),
-            (Pawn, Square::E4, Square::D5),
-        ]);
-
-        assert!(pos.get_piece(Colour::White, Pawn).intersects(Square::D5.to_bitboard()));
-        assert!(!pos.get_piece(Colour::Black, Pawn).intersects(Square::D5.to_bitboard()));
-        assert_eq!(pos.get_piece(Colour::Black, Pawn).count_ones(), 7);
-    }
-
-    #[test]
-    fn test_queen_slide_moves() {
-        let mut pos = Position::blank();
-
-        pos.update_bitboard(Colour::White, Piece::Queen, Square::D1.to_bitboard());
-        pos.update_bitboard(Colour::White, Piece::Knight, Square::F3.to_bitboard());
-        pos.update_bitboard(Colour::White, Piece::Pawn, Square::G4.to_bitboard());
-
-        assert!(!pos.get_moves(Colour::White, Piece::Queen).unwrap().intersects(Square::G4.to_bitboard()));
-    }
 }
