@@ -77,11 +77,12 @@ fn main() {
 
         game.make_move(mv);
         let computer_move = get_best_move(&game.pos);
-        println!("Computer eval: {}", computer_move.0);
+
         println!("Computer mv: {:?}", computer_move.1);
         if let Some(computer_move) = computer_move.1 {
             game.make_move(computer_move);
         }
+        println!("Computer eval: {}", computer_move.0);
         println!("{}", game.pos);
     }
 }

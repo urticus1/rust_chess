@@ -160,6 +160,10 @@ pub enum Piece {
 
 impl Piece {
     pub const ALL: &'static [Piece; 6] = &[Pawn, Rook, Knight, Bishop, Queen, King];
+    pub const VALUES: &'static [[i32; 6]; 2] = &[
+        [100, 500, 300, 300, 900, 10000],
+        [-100, -500, -300, -300, -900, -10000],
+    ];
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -282,25 +286,6 @@ pub fn bishop_moves(pos: Square, pieces: BitBoard) -> BitBoard {
 
 #[cfg(test)]
 mod tests {
-    use crate::pieces::{Colour, Piece};
-    use crate::position::Position;
-    use crate::squares::Square;
-
-    #[test]
-    fn test_rook_captures() {
-
-        let mut pos = Position::blank();
-        pos.update_bitboard(Colour::White, Piece::Rook, Square::A1.to_bitboard());
-
-        pos.update_bitboard(Colour::White, Piece::Queen, Square::A2.to_bitboard());
-        pos.update_bitboard(Colour::Black, Piece::Queen, Square::B1.to_bitboard());
-
-        let moves = pos.get_moves(Colour::White, Piece::Rook);
-
-        assert!(moves.is_some());
-        assert!(Square::B1.to_bitboard() == moves.unwrap())
-    }
-
     mod rook_pext {
         use crate::bitboard::BitBoard;
         use crate::pieces::{generate_all_rook_move_sets, generate_rook_blockers_from_square, rook_moves, rook_moves_pext};

@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use crate::squares::Square;
@@ -17,24 +18,29 @@ impl GameState {
     }
 
     pub fn make_move(&mut self, m: Move) -> Result<(), MoveError> {
-        let current = &self.pos;
-
         match m {
             Move::Normal(ref mv) => {
                 if let Err(err) = self.validate_normal_move(mv) {
                     return Err(err);
                 }
-                self.pos.make_normal_move(mv);
+            },
+            Move::Check(ref mv) => {
+                if let Err(err) = self.validate_normal_move(mv) {
+                    return Err(err);
+                }
+            },
+            Move::Capture(ref mv) => {
+                if let Err(err) = self.validate_normal_move(mv) {
+                    return Err(err);
+                }
             },
             Move::Castle(side, colour) => {
                 if let Err(err) = self.validate_castle_move(colour, side) {
                     return Err(err);
                 }
-                self.pos.make_castle_move(side);
             }
         }
-        let res = current.make_move(m);
-        self.pos = res;
+        self.pos.make_reversible_move(m);
         Ok(())
     }
 
@@ -86,8 +92,21 @@ pub enum CastleSide {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Move {
-    Normal(NormalMove),
     Castle(CastleSide, Colour),
+    Normal(NormalMove),
+    Check(NormalMove),
+    Capture(NormalMove),
+}
+
+impl Move {
+    pub fn order_key(&self) -> u8 {
+        match self {
+            Move::Capture(_) => 0,
+            Move::Check(_) => 1,
+            Move::Castle(..) => 2,
+            Move::Normal(_) => 3,
+        }
+    }
 }
 
 #[derive(Debug)]
