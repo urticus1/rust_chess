@@ -54,18 +54,17 @@ pub fn generate_valid_moves(position: &mut Position) -> [Option<Move>; 256] {
 
 pub fn is_square_attacked_by_colour(position: &Position, sq: Square, colour: Colour) -> bool {
     let blockers = position.get_all_pieces();
-    if bishop_moves_pext(sq, blockers).intersects(position.get_piece(colour, Piece::Bishop)) {
+
+    let bishop_moves = bishop_moves_pext(sq, blockers);
+    if bishop_moves.intersects(position.get_piece(colour, Piece::Bishop)) || bishop_moves.intersects(position.get_piece(colour, Piece::Queen)) {
         return true;
     }
-    if bishop_moves_pext(sq, blockers).intersects(position.get_piece(colour, Piece::Queen)) {
+
+    let rook_moves = rook_moves_pext(sq, blockers);
+    if rook_moves.intersects(position.get_piece(colour, Piece::Rook)) || rook_moves.intersects(position.get_piece(colour, Piece::Queen)) {
         return true;
     }
-    if rook_moves_pext(sq, blockers).intersects(position.get_piece(colour, Piece::Rook)) {
-        return true;
-    }
-    if rook_moves_pext(sq, blockers).intersects(position.get_piece(colour, Piece::Queen)) {
-        return true;
-    }
+
     if KNIGHT_MOVES[sq as usize].intersects(position.get_piece(colour, Piece::Knight)) {
         return true;
     }

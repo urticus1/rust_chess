@@ -1,11 +1,12 @@
 use std::fmt;
-use std::fmt::Debug;
+use std::fmt::{write, Debug};
 use crate::bitboard::{BitBoard, ROW_1, ROW_2, ROW_7, ROW_8};
 use crate::engine::POSITION_SQUARE_EVALS;
 use crate::game::{CastleSide, Move, NormalMove};
 use crate::move_gen::is_square_attacked_by_colour;
 use crate::squares::Square;
 use crate::pieces::{Colour, Piece};
+use crate::zobrist::{calculate_hash, piece_key};
 
 const STARTING_PAWNS_BLACK: BitBoard = ROW_7;
 const STARTING_PAWNS_WHITE: BitBoard = ROW_2;
@@ -41,6 +42,7 @@ pub struct Position {
     pub player_turn: Colour,
     pub can_castle: [[bool; 2]; 2],
     pub eval: i32,
+    pub hash: u64
 }
 
 struct NormalAntiMove {
@@ -48,16 +50,16 @@ struct NormalAntiMove {
     to: Square,
     piece: Piece,
     captured: Option<Piece>,
-    kingside_castle: bool,
-    queenside_castle: bool,
+    can_castle: [[bool; 2]; 2],
+    hash: u64,
 }
 
 pub enum AntiMove {
     Normal (NormalAntiMove),
     Castle {
         side: CastleSide,
-        kingside_castle: bool,
-        queenside_castle: bool,
+        can_castle: [[bool; 2]; 2],
+        hash: u64,
     }
 }
 
@@ -74,7 +76,7 @@ pub enum FenError {
 impl Position {
 
     pub fn new_standard_game() -> Self {
-        Position {
+        let mut pos = Position {
             piece_boards: [
                 [
                     STARTING_PAWNS_WHITE,
@@ -97,8 +99,11 @@ impl Position {
             all_pieces: [ROW_1 | ROW_2, ROW_7 | ROW_8],
             player_turn: Colour::White,
             can_castle: [[true, true], [true, true]],
-            eval: 0
-        }
+            eval: 0,
+            hash: 0
+        };
+        pos.hash = calculate_hash(&pos);
+        pos
     }
 
     pub fn blank() -> Self {
@@ -110,7 +115,8 @@ impl Position {
             player_turn: Colour::White,
             all_pieces: [BitBoard(0); 2],
             can_castle: [[true, true], [true, true]],
-            eval: 0
+            eval: 0,
+            hash: 0
         }
     }
 
@@ -186,22 +192,22 @@ impl Position {
             }
             None => return Err(FenError::MissingField("castling")),
         }
-
+        pos.hash = calculate_hash(&pos);
         Ok(pos)
     }
 
     pub fn reverse_move(&mut self, mv: AntiMove) {
         match mv {
             AntiMove::Normal(mv) => self.reverse_normal_move(mv),
-            AntiMove::Castle { side, kingside_castle, queenside_castle } => self.reverse_castle_move(side, kingside_castle, queenside_castle),
+            AntiMove::Castle { side, can_castle, hash } => self.reverse_castle_move(side, can_castle, hash),
         }
     }
 
-    fn reverse_castle_move(&mut self, side: CastleSide, kingside_castle: bool, queenside_castle: bool) {
+    fn reverse_castle_move(&mut self, side: CastleSide, can_castle: [[bool; 2]; 2], hash: u64) {
         let colour = self.player_turn.other();
         self.player_turn = colour;
-        self.can_castle[colour as usize][CastleSide::King as usize] = kingside_castle;
-        self.can_castle[colour as usize][CastleSide::Queen as usize] = queenside_castle;
+        self.hash = hash;
+        self.can_castle = can_castle;
 
         let (rook_start, rook_end, king_start, king_end) = match (colour, side) {
             (Colour::White, CastleSide::King) => (Square::F1, Square::H1, Square::G1, Square::E1),
@@ -232,14 +238,14 @@ impl Position {
             self.eval += POSITION_SQUARE_EVALS[self.player_turn as usize][captured as usize][mv.from as usize];
         }
         self.player_turn = self.player_turn.other();
-        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = mv.kingside_castle;
-        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = mv.queenside_castle;
+        self.can_castle = mv.can_castle;
 
         let board = self.get_piece_board(self.player_turn, mv.piece);
         self.eval -= POSITION_SQUARE_EVALS[self.player_turn as usize][mv.piece as usize][mv.from as usize];
         self.eval += POSITION_SQUARE_EVALS[self.player_turn as usize][mv.piece as usize][mv.to as usize];
         self.set_bitboard(self.player_turn, mv.piece, (board | mv.to.to_bitboard()) & !mv.from.to_bitboard());
         self.all_pieces[self.player_turn as usize] = (self.all_pieces[self.player_turn as usize] | mv.to.to_bitboard()) & !mv.from.to_bitboard();
+        self.hash = mv.hash;
     }
 
     pub fn make_reversible_move(&mut self, mv: Move) -> AntiMove {
@@ -254,10 +260,12 @@ impl Position {
     fn make_reversible_normal_move(&mut self, mv: NormalMove) -> AntiMove {
         let from = mv.from.to_bitboard();
         let to = mv.to.to_bitboard();
+        let old_hash = self.hash;
 
+        self.hash ^= piece_key(mv.piece, self.player_turn, mv.from);
+        self.hash ^= piece_key(mv.piece, self.player_turn, mv.to);
 
-        let kingside_castle = self.can_castle[self.player_turn as usize][CastleSide::King as usize];
-        let queenside_castle = self.can_castle[self.player_turn as usize][CastleSide::King as usize];
+        let old_can_castle = self.can_castle;
 
         let mut board = self.get_current_turn_boards()[mv.piece as usize];
         board = (board & !from) | to;
@@ -270,28 +278,9 @@ impl Position {
             self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
             self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
         }
-        else if mv.piece == Piece::Rook {
-            let rook_board = self.get_piece_board(self.player_turn, Piece::Rook);
-            match self.player_turn {
-                Colour::White => {
-                    if (rook_board & Square::H1.to_bitboard()).0 != 0 {
-                        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
-                    }
-                    else if (rook_board & Square::A1.to_bitboard()).0 != 0 {
-                        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
-                    }
-                }
-                Colour::Black => {
-                    if (rook_board & Square::H8.to_bitboard()).0 != 0 {
-                        self.can_castle[self.player_turn as usize][CastleSide::King as usize] = false;
-                    }
-                    else if (rook_board & Square::A8.to_bitboard()).0 != 0 {
-                        self.can_castle[self.player_turn as usize][CastleSide::Queen as usize] = false;
-                    }
-                }
-            }
-
-        }
+        // Anything leaving or landing on a rook's home square (the rook moving, or it being captured) ends that right.
+        self.revoke_castling_from_rook_square(mv.from);
+        self.revoke_castling_from_rook_square(mv.to);
 
         let opponent = self.player_turn.other();
         self.player_turn = self.player_turn.other();
@@ -304,6 +293,7 @@ impl Position {
                 captured = Some(piece.clone());
                 self.eval -= Piece::VALUES[opponent as usize][*piece as usize];
                 self.eval -= POSITION_SQUARE_EVALS[opponent as usize][*piece as usize][mv.to as usize];
+                self.hash ^= piece_key(*piece, opponent, mv.to);
             }
         }
         AntiMove::Normal ( NormalAntiMove {
@@ -311,9 +301,20 @@ impl Position {
             to: mv.from,
             piece: mv.piece,
             captured,
-            kingside_castle,
-            queenside_castle,
+            can_castle: old_can_castle,
+            hash: old_hash,
         })
+    }
+
+    fn revoke_castling_from_rook_square(&mut self, sq: Square) {
+        let (colour, side) = match sq {
+            Square::H1 => (Colour::White, CastleSide::King),
+            Square::A1 => (Colour::White, CastleSide::Queen),
+            Square::H8 => (Colour::Black, CastleSide::King),
+            Square::A8 => (Colour::Black, CastleSide::Queen),
+            _ => return,
+        };
+        self.can_castle[colour as usize][side as usize] = false;
     }
 
     pub fn get_piece(&self, colour: Colour, piece: Piece) -> BitBoard {
@@ -322,8 +323,8 @@ impl Position {
 
     pub fn make_castle_move(&mut self, side: CastleSide) -> AntiMove {
         let colour = self.player_turn;
-        let kingside_castle = self.can_castle[colour as usize][CastleSide::King as usize];
-        let queenside_castle = self.can_castle[colour as usize][CastleSide::Queen as usize];
+        let old_hash = self.hash;
+        let old_can_castle = self.can_castle;
         self.can_castle[colour as usize][CastleSide::King as usize] = false;
         self.can_castle[colour as usize][CastleSide::Queen as usize] = false;
 
@@ -347,9 +348,18 @@ impl Position {
         self.eval -= rook_evals[rook_start as usize];
         self.eval += rook_evals[rook_end as usize];
 
+        self.hash ^= piece_key(Piece::Rook, colour, rook_start);
+        self.hash ^= piece_key(Piece::Rook, colour, rook_end);
+        self.hash ^= piece_key(Piece::King, colour, king_start);
+        self.hash ^= piece_key(Piece::King, colour, king_end);
+
         self.player_turn = colour.other();
 
-        AntiMove::Castle { side, kingside_castle, queenside_castle }
+        AntiMove::Castle {
+            side,
+            can_castle: old_can_castle,
+            hash: old_hash,
+        }
     }
 
     fn get_current_turn_boards(&self) -> &[BitBoard; 6] {
@@ -438,7 +448,9 @@ impl fmt::Display for Position {
         for file in b'A'..=b'H' {
             write!(f, "{} ", file as char)?;
         }
-        write!(f, "\n\n\n")
+        write!(f, "\n\n\n");
+        write!(f, "{}\n", self.hash);
+        write!(f, "{}", self.eval)
     }
 }
 
@@ -457,7 +469,10 @@ impl Debug for Position {
         for file in b'A'..=b'H' {
             write!(f, "{} ", file as char)?;
         }
-        write!(f, "\n\n\n")
+        write!(f, "\n\n\n");
+        write!(f, "{}\n", self.hash);
+        write!(f, "{}", self.eval)
+
     }
 }
 

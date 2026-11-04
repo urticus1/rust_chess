@@ -5,11 +5,12 @@ mod squares;
 mod position;
 mod engine;
 mod move_gen;
+mod zobrist;
 
 use std::io;
 use std::time::Instant;
 use std::ops::{BitAnd, BitOr, Not};
-use crate::engine::get_best_move;
+use crate::engine::Engine;
 use crate::game::{CastleSide, GameState, Move, NormalMove};
 use crate::squares::{Square};
 use crate::pieces::{Piece};
@@ -24,6 +25,8 @@ fn main() {
     }
 
     let mut game = GameState::new_standard_game();
+
+    let mut engine = Engine::new();
 
     loop {
         let mut buffer = String::new();
@@ -76,7 +79,7 @@ fn main() {
         };
 
         game.make_move(mv);
-        let computer_move = get_best_move(&game.pos);
+        let computer_move = engine.get_best_move(&game.pos);
 
         println!("Computer mv: {:?}", computer_move.1);
         if let Some(computer_move) = computer_move.1 {
@@ -90,7 +93,8 @@ fn main() {
 fn run_bench() {
     let pos = Position::new_standard_game();
     let start = Instant::now();
-    let (eval, mv) = get_best_move(&pos);
+    let mut engine = Engine::new();
+    let (eval, mv) = engine.get_best_move(&pos);
     println!("search from start: {:.2?}  eval={} mv={:?}", start.elapsed(), eval, mv);
 }
 
