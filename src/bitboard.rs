@@ -1,35 +1,73 @@
+use std::fmt;
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl};
-use crate::{COL_A, COL_H, ROW_1, ROW_8, ROW_MASK};
-use crate::moves::Direction;
+use crate::squares::{Direction, Square};
 
-#[derive(Copy, Clone)]
+pub static ROW_MASK: u64 = 0b_11111111;
+
+pub static ROW_1: BitBoard = BitBoard(ROW_MASK);
+pub static ROW_2: BitBoard = BitBoard(ROW_MASK << 8);
+pub static ROW_3: BitBoard = BitBoard(ROW_MASK << 16);
+pub static ROW_4: BitBoard = BitBoard(ROW_MASK << 24);
+pub static ROW_5: BitBoard = BitBoard(ROW_MASK << 32);
+pub static ROW_6: BitBoard = BitBoard(ROW_MASK << 40);
+pub static ROW_7: BitBoard = BitBoard(ROW_MASK << 48);
+pub static ROW_8: BitBoard = BitBoard(ROW_MASK << 56);
+
+pub static COL_A: BitBoard = BitBoard(0b_0000000100000001000000010000000100000001000000010000000100000001 );
+pub static COL_B: BitBoard = BitBoard(0b_0000001000000010000000100000001000000010000000100000001000000010 );
+pub static COL_C: BitBoard = BitBoard(0b_0000010000000100000001000000010000000100000001000000010000000100 );
+pub static COL_D: BitBoard = BitBoard( 0b_0000100000001000000010000000100000001000000010000000100000001000 );
+pub static COL_E:  BitBoard = BitBoard(0b_0001000000010000000100000001000000010000000100000001000000010000 );
+pub static COL_F: BitBoard = BitBoard(0b_0010000000100000001000000010000000100000001000000010000000100000 );
+pub static COL_G: BitBoard = BitBoard(0b_0100000001000000010000000100000001000000010000000100000001000000 );
+pub static COL_H:  BitBoard = BitBoard(0b_1000000010000000100000001000000010000000100000001000000010000000 );
+
+pub static INTERIOR_SQUARES:  BitBoard = BitBoard(!(ROW_1.0 | ROW_8.0 | COL_A.0 | COL_H.0));
+
+
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub struct BitBoard(pub u64);
 
-impl BitBoard {
-    pub fn print(&self) {
-        print!("\n\n\n");
+impl fmt::Display for BitBoard {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "\n\n\n")?;
         for i in 0..8 {
             let mask = (ROW_MASK << 56) >> i * 8;
-            print!("{} ", 7 - i + 1);
+            write!(f, "{} ", 7 - i + 1)?;
             let row = (self.0 & mask) >> (56 - i * 8);
-            self.print_row(row as u8);
+            self.fmt_row(f, row as u8)?;
         }
-        print!("  ");
+        write!(f, "  ")?;
         for i in 0..8 {
-            print!("{} ", ('A' as u8 + i) as char);
+            write!(f, "{} ", ('A' as u8 + i) as char)?;
         }
-        print!("\n\n\n");
+        write!(f, "\n\n\n")
     }
+}
 
-    fn print_row(&self, row: u8) {
-        // println!("debug {}", row);
+impl Iterator for BitBoard {
+    type Item = Square;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.0 == 0 {
+            return None;
+        }
+        let zeros = self.0.trailing_zeros();
+        self.0 = self.0 & !(1 << zeros);
+        Some(Square::try_from(zeros as u64).expect("bitboard iterator generated non unique sqaure"))
+    }
+}
+
+impl BitBoard {
+    fn fmt_row(&self, f: &mut fmt::Formatter, row: u8) -> fmt::Result {
         for i in 0..8 {
             let mask = 0b_00000001 << i;
             let occupied = row & mask != 0;
-            print!("{} ", if occupied { "X" } else { "." });
+            write!(f, "{} ", if occupied { "X" } else { "." })?;
         }
 
-        println!("");
+        writeln!(f)
     }
 
     pub fn shift(&self, direction: Direction) -> BitBoard {
@@ -43,6 +81,18 @@ impl BitBoard {
             Direction::RightUp => BitBoard((self.0 << 9) & ! ROW_1.0 & !COL_A.0),
             Direction::RightDown =>  BitBoard((self.0 >> 7) & !ROW_8.0 & !COL_A.0),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+
+    pub fn intersects(&self, other: BitBoard) -> bool {
+        self.0 & other.0 != 0
+    }
+
+    pub fn count_ones(&self) -> usize {
+        self.0.count_ones() as usize
     }
 }
 
@@ -75,34 +125,11 @@ impl Not for BitBoard {
     type Output = Self;
 
     fn not(self) -> Self::Output {
-        return BitBoard(!self.0)
+        BitBoard(!self.0)
     }
 }
 
-impl Not for &BitBoard {
-    type Output = BitBoard;
 
-    fn not(self) -> Self::Output {
-        BitBoard(!&self.0)
-    }
-}
-
-    impl BitAnd for &BitBoard {
-    type Output = BitBoard;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        BitBoard (self.0 & rhs.0)
-    }
-
-}
-
-impl BitXor for &BitBoard {
-    type Output = BitBoard;
-
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        BitBoard (self.0 ^ rhs.0)
-    }
-}
 impl BitXor for BitBoard {
     type Output = BitBoard;
 
